@@ -357,12 +357,47 @@ MainTab:AddToggle({
     end
 })
 
--- ========== DISPARAR (HÍBRIDO - MOUSE + TOQUE) ==========
+-- ========== DISPARAR (CLIQUE NO BOTÃO DA INTERFACE) ==========
 MainTab:AddToggle({
     Name = "Disparar (Toque)",
     Default = false,
     Callback = function(Value)
-        -- ===== FUNÇÃO QUE DISPARA E REATIVA O MODO MOBILE =====
+        -- ===== FUNÇÃO QUE ENCONTRA O BOTÃO DE TIRO NA INTERFACE =====
+        local function getFireButton()
+            -- Procura em todas as interfaces do jogador
+            local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+            if not playerGui then return nil end
+
+            -- Lista de nomes comuns do botão de tiro
+            local possibleNames = {"Fire", "Shoot", "Gun", "FireButton", "ShootButton", "FireGun"}
+            
+            -- Função recursiva para procurar um TextButton/ImageButton
+            local function searchButton(instance)
+                if not instance then return nil end
+                if instance:IsA("TextButton") or instance:IsA("ImageButton") then
+                    local text = instance.Text or ""
+                    if text:lower():find("fire") or text:lower():find("shoot") or text:lower():find("atirar") then
+                        return instance
+                    end
+                    -- Verifica se o nome do botão corresponde
+                    for _, name in ipairs(possibleNames) do
+                        if instance.Name:lower():find(name:lower()) then
+                            return instance
+                        end
+                    end
+                end
+                -- Procura nos filhos
+                for _, child in ipairs(instance:GetChildren()) do
+                    local found = searchButton(child)
+                    if found then return found end
+                end
+                return nil
+            end
+            
+            return searchButton(playerGui)
+        end
+
+        -- ===== FUNÇÃO PARA ATIRAR =====
         local function shootWithTouch()
             if not Char then
                 OrionLib:MakeNotification({
@@ -394,26 +429,43 @@ MainTab:AddToggle({
                 return
             end
 
-            -- ===== MÉTODO 1: Mouse (funciona) + reativação do modo mobile =====
+            -- ===== MÉTODO 1: Tentar clicar no botão da interface =====
+            local fireButton = getFireButton()
+            if fireButton then
+                pcall(function()
+                    fireButton:Activate()
+                    OrionLib:MakeNotification({
+                        Name = "Tryharder Hub",
+                        Content = "✅ Clique no botão Fire!",
+                        Image = "rbxassetid://7733658504",
+                        Time = 2
+                    })
+                    return
+                end)
+                return
+            end
+
+            -- ===== MÉTODO 2: VirtualInputManager (mouse) =====
             local VIM = game:GetService("VirtualInputManager")
             local screenSize = workspace.CurrentCamera.ViewportSize
             local centerX = screenSize.X / 2
             local centerY = screenSize.Y / 2
 
-            -- Dispara o tiro (modo PC)
+            -- Dispara o tiro
             VIM:SendMouseButtonEvent(centerX, centerY, 0, true, game, 1)
             task.wait(0.05)
             VIM:SendMouseButtonEvent(centerX, centerY, 0, false, game, 1)
-            
-            -- Força o retorno ao modo mobile (toque fantasma em uma posição fora da tela)
+
+            -- ===== FORÇA O RETORNO AO MODO MOBILE =====
+            -- Envia um toque em uma área que não afeta o jogo (chat ou menu)
             task.wait(0.1)
-            VIM:SendTouchEvent(1, -100, -100, true, game)  -- Toque fora da tela
+            VIM:SendTouchEvent(1, 100, 100, true, game)  -- Toque dentro da tela (canto superior esquerdo)
             task.wait(0.05)
-            VIM:SendTouchEvent(1, -100, -100, false, game) -- Solta o toque
+            VIM:SendTouchEvent(1, 100, 100, false, game)
 
             OrionLib:MakeNotification({
                 Name = "Tryharder Hub",
-                Content = "✅ Tiro disparado!",
+                Content = "✅ Tiro disparado (via mouse)!",
                 Image = "rbxassetid://7733658504",
                 Time = 2
             })
