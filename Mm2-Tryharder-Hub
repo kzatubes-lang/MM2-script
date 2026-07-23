@@ -357,51 +357,18 @@ MainTab:AddToggle({
     end
 })
 
--- ========== SHOOT MURDER BUTTON (VERSÃO MOBILE) ==========
+-- ========== TESTE: DISPARAR (SEM MIRAR) ==========
 MainTab:AddToggle({
-    Name = "Shoot Murder Button",
+    Name = "Disparar (Teste)",
     Default = false,
     Callback = function(Value)
-        env.ShootMurderEnabled = Value
-
-        -- Função para encontrar o Murderer (usa getRoles que já existe)
-        local function getMurderer()
-            local roles = getRoles()
-            for plrName, role in pairs(roles) do
-                if role == "Murderer" then
-                    local player = Players:FindFirstChild(plrName)
-                    if player and player ~= LocalPlayer then
-                        return player
-                    end
-                end
-            end
-            return nil
-        end
-
-        -- Função para obter o alvo (HumanoidRootPart do Murderer)
-        local function getMurdererTarget()
-            local murderer = getMurderer()
-            if not murderer then return nil, nil end
-            local char = murderer.Character
-            if not char then return nil, nil end
-            local hrp = char:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                return hrp, hrp.Position
-            end
-            local torso = char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
-            if torso then
-                return torso, torso.Position
-            end
-            return nil, nil
-        end
-
-        -- Função principal de tiro
-        local function shootMurder()
-            -- Verifica personagem
+        -- ===== FUNÇÃO QUE SÓ DISPARA =====
+        local function shootOnly()
             if not Char then
+                print("Personagem não carregado")
                 OrionLib:MakeNotification({
                     Name = "Tryharder Hub",
-                    Content = "Aguarde o personagem carregar!",
+                    Content = "Personagem não carregado!",
                     Image = "rbxassetid://7733658504",
                     Time = 2
                 })
@@ -419,42 +386,34 @@ MainTab:AddToggle({
             end
 
             if not gun then
+                print("Você não tem uma arma!")
                 OrionLib:MakeNotification({
                     Name = "Tryharder Hub",
-                    Content = "Você não tem uma arma!",
+                    Content = "Pegue uma arma primeiro!",
                     Image = "rbxassetid://7733658504",
                     Time = 2
                 })
                 return
             end
 
-            -- Obtém alvo
-            local targetPart, targetPos = getMurdererTarget()
-            if not targetPart or not targetPos then
-                OrionLib:MakeNotification({
-                    Name = "Tryharder Hub",
-                    Content = "Murderer não encontrado!",
-                    Image = "rbxassetid://7733658504",
-                    Time = 2
-                })
-                return
-            end
-
-            -- Obtém Handle da arma
+            -- Obtém o Handle
             local handle = gun:FindFirstChild("Handle")
             if not handle then
+                print("Handle não encontrado")
                 OrionLib:MakeNotification({
                     Name = "Tryharder Hub",
-                    Content = "Handle da arma não encontrado!",
+                    Content = "Handle não encontrado!",
                     Image = "rbxassetid://7733658504",
                     Time = 2
                 })
                 return
             end
 
+            -- Posição da arma e alvo (10 metros para frente)
             local originPos = handle.Position
+            local targetPos = originPos + Vector3.new(0, 0, -10)
 
-            -- ===== MÉTODO 1: GunFired (capturado no SimpleSpy) =====
+            -- ===== MÉTODO 1: GunFired =====
             local success = pcall(function()
                 local weaponService = game:FindFirstChild("ClientServices")
                 if weaponService then
@@ -462,7 +421,14 @@ MainTab:AddToggle({
                     if weaponService then
                         local gunFired = weaponService:FindFirstChild("GunFired")
                         if gunFired and gunFired:IsA("RemoteEvent") then
-                            gunFired:FireServer(handle, originPos, targetPos, targetPart)
+                            gunFired:FireServer(handle, originPos, targetPos, nil)
+                            print("✅ Disparo via GunFired!")
+                            OrionLib:MakeNotification({
+                                Name = "Tryharder Hub",
+                                Content = "✅ Disparo efetuado!",
+                                Image = "rbxassetid://7733658504",
+                                Time = 2
+                            })
                             return true
                         end
                     end
@@ -470,31 +436,25 @@ MainTab:AddToggle({
                 return false
             end)
 
-            if success then
-                OrionLib:MakeNotification({
-                    Name = "Tryharder Hub",
-                    Content = "🔫 Tiro disparado contra o Murderer!",
-                    Image = "rbxassetid://7733658504",
-                    Time = 2
-                })
-                return
-            end
+            if success then return end
 
-            -- ===== MÉTODO 2: CreateBeam (fallback) =====
+            -- ===== MÉTODO 2: CreateBeam =====
             pcall(function()
                 local remote = gun:FindFirstChild("KnifeLocal"):FindFirstChild("CreateBeam"):FindFirstChild("RemoteFunction")
                 if remote then
                     remote:InvokeServer(1, targetPos, "AH2")
+                    print("✅ Disparo via CreateBeam!")
                     OrionLib:MakeNotification({
                         Name = "Tryharder Hub",
-                        Content = "🔫 Tiro via CreateBeam!",
+                        Content = "✅ Disparo (CreateBeam)!",
                         Image = "rbxassetid://7733658504",
                         Time = 2
                     })
                 else
+                    print("❌ Nenhum método funcionou")
                     OrionLib:MakeNotification({
                         Name = "Tryharder Hub",
-                        Content = "❌ Nenhum método funcionou!",
+                        Content = "❌ Falha ao disparar!",
                         Image = "rbxassetid://7733658504",
                         Time = 3
                     })
@@ -502,28 +462,27 @@ MainTab:AddToggle({
             end)
         end
 
-        -- Criação/remoção do botão na tela
+        -- ===== CRIA O BOTÃO NA TELA =====
         local guip = gethui and gethui() or game:FindFirstChild("CoreGui") or LocalPlayer:FindFirstChild("PlayerGui")
         local function createButton()
             if not guip then return end
-            if guip:FindFirstChild("ShootMurderBtn") then guip:FindFirstChild("ShootMurderBtn"):Destroy() end
+            if guip:FindFirstChild("ShootTestBtn") then guip:FindFirstChild("ShootTestBtn"):Destroy() end
 
             local screenGui = Instance.new("ScreenGui")
-            screenGui.Name = "ShootMurderBtn"
+            screenGui.Name = "ShootTestBtn"
             screenGui.Parent = guip
 
             local button = Instance.new("TextButton")
-            button.Name = "ShootBtn"
+            button.Name = "ShootTest"
             button.Parent = screenGui
-            button.Size = UDim2.new(0, 120, 0, 50)
-            button.Position = UDim2.new(0.5, -60, 0.5, -25)
-            button.Text = "🔫 ATIRAR"
+            button.Size = UDim2.new(0, 100, 0, 50)
+            button.Position = UDim2.new(0.5, -50, 0.8, 0)
+            button.Text = "🔫 DISPARAR"
             button.TextColor3 = Color3.fromRGB(255, 255, 255)
             button.TextSize = 16
             button.Font = Enum.Font.GothamBold
-            button.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-            button.BackgroundTransparency = 0.2
-            button.BorderColor3 = Color3.fromRGB(255, 0, 0)
+            button.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
+            button.BorderColor3 = Color3.fromRGB(255, 255, 255)
             button.BorderSizePixel = 2
             button.Draggable = true
             button.Visible = true
@@ -532,23 +491,21 @@ MainTab:AddToggle({
             corner.CornerRadius = UDim.new(0, 8)
             corner.Parent = button
 
-            local stroke = Instance.new("UIStroke")
-            stroke.Color = Color3.fromRGB(255, 0, 0)
-            stroke.Thickness = 2
-            stroke.Parent = button
-
-            button.MouseButton1Click:Connect(shootMurder)
+            button.MouseButton1Click:Connect(shootOnly)
         end
 
         if Value then
             createButton()
+            print("🔫 Botão DISPARAR criado!")
         else
-            if guip and guip:FindFirstChild("ShootMurderBtn") then
-                guip:FindFirstChild("ShootMurderBtn"):Destroy()
+            if guip and guip:FindFirstChild("ShootTestBtn") then
+                guip:FindFirstChild("ShootTestBtn"):Destroy()
+                print("🔫 Botão DISPARAR removido!")
             end
         end
     end
 })
+
 
 -- ========== FLING MURDERER (CORRIGIDO) ==========
 TrollTab:AddButton({
