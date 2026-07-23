@@ -1,0 +1,870 @@
+--[[
+    Tryharder Hub - Murder Mystery 2
+    Baseado no Open-Source original, com correções solicitadas.
+    Funções: ESP Players, ESP Gun, Grab Gun, Auto Grab Gun, Fling Murderer, Fling Sheriff, Teleportes, Noclip.
+]]
+
+if game.PlaceId ~= 142823291 then return end -- só executa no MM2
+
+-- ========== CARREGAR ORIONLIB ==========
+local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/Backlostunking/ScriptLua/refs/heads/main/Orion-GB-V2.Lua"))()
+local executor = identifyexecutor and identifyexecutor() or getexecutorname and getexecutorname() or "Unknown"
+local GameName = game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name
+
+local Window = OrionLib:MakeWindow({
+    IntroText = "Tryharder Hub",
+    IntroIcon = "rbxassetid://7733955511",
+    Name = ("Tryharder Hub • "..GameName.." ✓ Executor "..executor),
+    IntroToggleIcon = "rbxassetid://4335489011",
+    HidePremium = false,
+    SaveConfig = false,
+    IntroEnabled = true,
+    ConfigFolder = "TryharderHub"
+})
+
+-- ========== CRIAÇÃO DAS ABAS ==========
+local MainTab = Window:MakeTab({Name = "Principal", Icon = "rbxassetid://4483345998", PremiumOnly = false})
+local EspTab = Window:MakeTab({Name = "Esp", Icon = "rbxassetid://4483345998", PremiumOnly = false})
+local TeleTab = Window:MakeTab({Name = "Teleporte", Icon = "rbxassetid://4483345998", PremiumOnly = false})
+local TrollTab = Window:MakeTab({Name = "Troll", Icon = "rbxassetid://4483345998", PremiumOnly = false})
+local PlayerTab = Window:MakeTab({Name = "Personagem", Icon = "rbxassetid://4335489011", PremiumOnly = false})
+
+-- ========== VARIÁVEIS GLOBAIS ==========
+local env = getgenv and getgenv() or getrenv and getrenv() or getfenv and getfenv(0) or _G
+local cloneref = cloneref or (function()
+    local s, func = pcall(function()
+        return loadstring(game:HttpGet("https://raw.githubusercontent.com/Backlostunking/Open-Source/refs/heads/main/cloneref-TheCloneVM"))()
+    end)
+    return s and func or function(s) return s end
+end)()
+
+local Players = cloneref(game:GetService("Players"))
+local ReplicatedStorage = cloneref(game:GetService("ReplicatedStorage"))
+local RunService = cloneref(game:GetService("RunService"))
+local Workspace = cloneref(game:GetService("Workspace"))
+local LocalPlayer = Players.LocalPlayer
+local backpack = LocalPlayer:FindFirstChild("Backpack") or LocalPlayer:WaitForChild("Backpack")
+local Char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Hum = Char and Char:FindFirstChildWhichIsA("Humanoid")
+local Root = (Hum and Hum.RootPart) or Char:FindFirstChild("HumanoidRootPart") or Char:FindFirstChild("Torso") or Char:FindFirstChild("UpperTorso")
+
+LocalPlayer.CharacterAdded:Connect(function()
+    repeat task.wait() until LocalPlayer.Character
+    Char = LocalPlayer.Character
+    Hum = Char:FindFirstChildWhichIsA("Humanoid")
+    Root = (Hum and Hum.RootPart) or Char:FindFirstChild("HumanoidRootPart") or Char:FindFirstChild("Torso") or Char:FindFirstChild("UpperTorso")
+end)
+
+-- ========== FUNÇÃO GET ROLES ==========
+local function getRoles()
+    local data = ReplicatedStorage:FindFirstChild("GetPlayerData", true):InvokeServer()
+    local roles = {}
+    for plr, plrData in pairs(data) do
+        if not plrData.Dead then
+            roles[plr] = plrData.Role
+        end
+    end
+    return roles
+end
+
+-- ========== FUNÇÃO FLING (CORRIGIDA) ==========
+local function SHubFling(TargetPlayer)
+    -- Atualiza as variáveis do personagem antes de cada uso
+    Char = LocalPlayer.Character
+    if not Char then return end
+    Hum = Char:FindFirstChildWhichIsA("Humanoid")
+    Root = Char:FindFirstChild("HumanoidRootPart") or Char:FindFirstChild("Torso") or Char:FindFirstChild("UpperTorso")
+    if not (Char and Hum and Root) then return end
+
+    local TCharacter = TargetPlayer.Character
+    if not TCharacter then return end
+    local THumanoid = TCharacter:FindFirstChildOfClass("Humanoid")
+    if not THumanoid then return end
+    
+    local TRootPart = THumanoid and THumanoid.RootPart
+    local THead = TCharacter:FindFirstChild("Head")
+    local Accessory = TCharacter:FindFirstChildOfClass("Accessory")
+    local Handle = Accessory and Accessory:FindFirstChild("Handle")
+    
+    -- Guarda posição original (local)
+    local oldPos = Root.CFrame
+    
+    -- Foca câmera no alvo
+    repeat task.wait()
+        Workspace.CurrentCamera.CameraSubject = THead or Handle or THumanoid
+    until Workspace.CurrentCamera.CameraSubject == THead or Handle or THumanoid
+    
+    local function FPos(BasePart, Pos, Ang)
+        local targetCF = CFrame.new(BasePart.Position) * Pos * Ang
+        Root.CFrame = targetCF
+        Char:SetPrimaryPartCFrame(targetCF)
+        Root.Velocity = Vector3.new(9e7, 9e8, 9e7)
+        Root.RotVelocity = Vector3.new(9e8, 9e8, 9e8)
+    end
+    
+    local function SFBasePart(BasePart)
+        local start = tick()
+        local angle = 0
+        local timeout = env.timeout or 2.5
+        repeat
+            if Root and THumanoid then
+                angle = angle + 100
+                for _, offset in ipairs{
+                    CFrame.new(0, 1.5, 0),
+                    CFrame.new(0, -1.5, 0),
+                    CFrame.new(2.25, 1.5, -2.25),
+                    CFrame.new(-2.25, -1.5, 2.25)
+                } do
+                    FPos(BasePart, offset + THumanoid.MoveDirection, CFrame.Angles(math.rad(angle), 0, 0))
+                    task.wait()
+                end
+            end
+        until not BasePart.Parent or BasePart.Velocity.Magnitude > 500 or tick() - start > timeout
+    end
+    
+    local BV = Instance.new("BodyVelocity")
+    BV.Name = "SeYyyVel!?"
+    BV.Velocity = Vector3.new(9e8, 9e8, 9e8)
+    BV.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+    BV.Parent = Root
+    Hum:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
+    
+    local target = TRootPart or THead or Handle
+    if target then
+        SFBasePart(target)
+    end
+    
+    BV:Destroy()
+    Hum:SetStateEnabled(Enum.HumanoidStateType.Seated, true)
+    
+    -- Volta câmera
+    repeat task.wait()
+        Workspace.CurrentCamera.CameraSubject = Hum
+    until Workspace.CurrentCamera.CameraSubject == Hum
+    
+    -- Volta à posição original
+    repeat
+        local cf = oldPos * CFrame.new(0, 0.5, 0)
+        Root.CFrame = cf
+        Char:SetPrimaryPartCFrame(cf)
+        Hum:ChangeState("GettingUp")
+        for _, part in ipairs(Char:GetChildren()) do
+            if part:IsA("BasePart") then
+                part.Velocity, part.RotVelocity = Vector3.zero, Vector3.zero
+            end
+        end
+        task.wait()
+    until not Root or (Root.Position - oldPos.p).Magnitude < 25
+end
+-- ========== ESP PLAYERS ==========
+EspTab:AddToggle({
+    Name = "Esp Player (Role&Name)",
+    Default = false,
+    Callback = function(Value)
+        env.ESP_ENABLED = Value
+        local updateLoop = nil
+        local roleColors = {
+            Murderer = Color3.fromRGB(255, 0, 0),
+            Sheriff = Color3.fromRGB(0, 0, 255),
+            Hero = Color3.fromRGB(255, 255, 0),
+            Innocent = Color3.fromRGB(0, 255, 0),
+            Default = Color3.fromRGB(200, 200, 200)
+        }
+
+        local function clearESP()
+            for _, player in ipairs(Players:GetPlayers()) do
+                if player ~= LocalPlayer and player.Character then
+                    local head = player.Character:FindFirstChild("Head")
+                    if head then
+                        local esp = head:FindFirstChild("RoleESP")
+                        if esp then esp:Destroy() end
+                    end
+                    local hl = player.Character:FindFirstChild("RoleHighlight")
+                    if hl then hl:Destroy() end
+                end
+            end
+        end
+
+        local function applyHighlight(character, role)
+    local existing = character:FindFirstChild("RoleHighlight")
+    if existing then existing:Destroy() end
+    local hl = Instance.new("Highlight")
+    hl.Name = "RoleHighlight"
+    hl.FillTransparency = 1        -- sem cor de preenchimento
+    hl.OutlineColor = Color3.new(1, 1, 1) -- contorno branco
+    hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    hl.OutlineTransparency = 0
+    hl.Parent = character
+end
+
+        local function createBillboard(head, role, playerName)
+    local esp = Instance.new("BillboardGui")
+    esp.Name = "RoleESP"
+    esp.Adornee = head
+    esp.Size = UDim2.new(5, 0, 5, 0)
+    esp.AlwaysOnTop = true
+    esp.Parent = head
+
+    local label = Instance.new("TextLabel")
+    label.Name = "RoleLabel"
+    label.Parent = esp
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.TextStrokeTransparency = 0
+    label.TextSize = 18
+    label.Font = Enum.Font.GothamBold
+    label.TextColor3 = Color3.fromRGB(255, 255, 255) -- sempre branco
+    label.Text = role or "Inocente"                  -- só o papel, sem nome
+end
+
+        local function updateESP()
+            local roles = getRoles()
+            for _, player in ipairs(Players:GetPlayers()) do
+                if player ~= LocalPlayer and player.Character then
+                    local head = player.Character:FindFirstChild("Head")
+                    if head then
+                        local role = roles[player.Name] or "Default"
+                        if not head:FindFirstChild("RoleESP") then
+                            createBillboard(head, role, player.Name)
+                        else
+                            local label = head.RoleESP:FindFirstChild("RoleLabel")
+                            if label then
+                                label.Text = ("Role: %s • Name: %s"):format(role, player.Name)
+                                label.TextColor3 = roleColors[role] or roleColors.Default
+                            end
+                        end
+                        local light = player.Character:FindFirstChild("RoleHighlight")
+                        if not light then
+                            applyHighlight(player.Character, role)
+                        else
+                            light.FillColor = roleColors[role] or roleColors.Default
+                        end
+                    end
+                end
+            end
+        end
+
+        local function startESP()
+            if updateLoop then return end
+            updateLoop = task.spawn(function()
+                while env.ESP_ENABLED do
+                    pcall(updateESP)
+                    task.wait(0.25)
+                end
+                clearESP()
+                updateLoop = nil
+            end)
+        end
+
+        if Value then
+            startESP()
+        else
+            clearESP()
+        end
+    end
+})
+
+-- ========== ESP GUN ==========
+EspTab:AddToggle({
+    Name = "Esp Gun",
+    Default = false,
+    Callback = function(Value)
+        env.GunEsp = Value
+        local gun = Workspace:FindFirstChild("GunDrop", true)
+        if not env.GunEsp then
+            if gun then
+                if gun:FindFirstChild("GunHighlight") then
+                    gun:FindFirstChild("GunHighlight"):Destroy()
+                end
+                if gun:FindFirstChild("GunEsp") then
+                    gun:FindFirstChild("GunEsp"):Destroy()
+                end
+            end
+        end
+        while env.GunEsp do
+            gun = Workspace:FindFirstChild("GunDrop", true)
+            if gun then
+                if not gun:FindFirstChild("GunHighlight") then
+                    local gunh = Instance.new("Highlight", gun)
+                    gunh.Name = "GunHighlight"
+                    gunh.FillColor = Color3.new(1, 1, 0)
+                    gunh.OutlineColor = Color3.new(1, 1, 1)
+                    gunh.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                    gunh.FillTransparency = 0.4
+                    gunh.OutlineTransparency = 0.5
+                end
+                if not gun:FindFirstChild("GunEsp") then
+                    local esp = Instance.new("BillboardGui")
+                    esp.Name = "GunEsp"
+                    esp.Adornee = gun
+                    esp.Size = UDim2.new(5, 0, 5, 0)
+                    esp.AlwaysOnTop = true
+                    esp.Parent = gun
+                    local text = Instance.new("TextLabel", esp)
+                    text.Name = "GunLabel"
+                    text.Size = UDim2.new(1, 0, 1, 0)
+                    text.BackgroundTransparency = 1
+                    text.TextStrokeTransparency = 0
+                    text.TextColor3 = Color3.fromRGB(255, 255, 0)
+                    text.Font = Enum.Font.FredokaOne
+                    text.TextSize = 16
+                    text.Text = "Gun Drop"
+                end
+            end
+            task.wait(0.1)
+        end
+    end
+})
+
+-- ========== GRAB GUN (CORRIGIDO) ==========
+MainTab:AddButton({
+    Name = "Grab Gun",
+    Callback = function()
+        if Char and Char ~= nil and Root then
+            local gun = Workspace:FindFirstChild("GunDrop", true)
+            if gun then
+                if firetouchinterest then
+                    firetouchinterest(Root, gun, 0)
+                    firetouchinterest(Root, gun, 1)
+                else
+                    gun.CFrame = Root.CFrame
+                end
+            end
+        end
+    end
+})
+
+-- ========== AUTO GRAB GUN (CORRIGIDO) ==========
+MainTab:AddToggle({
+    Name = "Auto Grab Gun",
+    Default = false,
+    Callback = function(Value)
+        env.AGG = Value
+        while env.AGG do
+            if Char and Char ~= nil and Root then
+                local gun = Workspace:FindFirstChild("GunDrop", true)
+                if gun then
+                    if firetouchinterest then
+                        firetouchinterest(Root, gun, 0)
+                        firetouchinterest(Root, gun, 1)
+                    else
+                        gun.CFrame = Root.CFrame
+                    end
+                end
+            end
+            task.wait(0.1)
+        end
+    end
+})
+
+-- ========== SHOOT MURDER BUTTON (VERSÃO MOBILE) ==========
+MainTab:AddToggle({
+    Name = "Shoot Murder Button",
+    Default = false,
+    Callback = function(Value)
+        env.ShootMurderEnabled = Value
+
+        -- Função para encontrar o Murderer (usa getRoles que já existe)
+        local function getMurderer()
+            local roles = getRoles()
+            for plrName, role in pairs(roles) do
+                if role == "Murderer" then
+                    local player = Players:FindFirstChild(plrName)
+                    if player and player ~= LocalPlayer then
+                        return player
+                    end
+                end
+            end
+            return nil
+        end
+
+        -- Função para obter o alvo (HumanoidRootPart do Murderer)
+        local function getMurdererTarget()
+            local murderer = getMurderer()
+            if not murderer then return nil, nil end
+            local char = murderer.Character
+            if not char then return nil, nil end
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                return hrp, hrp.Position
+            end
+            local torso = char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
+            if torso then
+                return torso, torso.Position
+            end
+            return nil, nil
+        end
+
+        -- Função principal de tiro
+        local function shootMurder()
+            -- Verifica personagem
+            if not Char then
+                OrionLib:MakeNotification({
+                    Name = "Tryharder Hub",
+                    Content = "Aguarde o personagem carregar!",
+                    Image = "rbxassetid://7733658504",
+                    Time = 2
+                })
+                return
+            end
+
+            -- Verifica se tem arma
+            local gun = Char:FindFirstChild("Gun")
+            if not gun then
+                local backpackGun = LocalPlayer:FindFirstChild("Backpack"):FindFirstChild("Gun")
+                if backpackGun then
+                    backpackGun.Parent = Char
+                    gun = Char:FindFirstChild("Gun")
+                end
+            end
+
+            if not gun then
+                OrionLib:MakeNotification({
+                    Name = "Tryharder Hub",
+                    Content = "Você não tem uma arma!",
+                    Image = "rbxassetid://7733658504",
+                    Time = 2
+                })
+                return
+            end
+
+            -- Obtém alvo
+            local targetPart, targetPos = getMurdererTarget()
+            if not targetPart or not targetPos then
+                OrionLib:MakeNotification({
+                    Name = "Tryharder Hub",
+                    Content = "Murderer não encontrado!",
+                    Image = "rbxassetid://7733658504",
+                    Time = 2
+                })
+                return
+            end
+
+            -- Obtém Handle da arma
+            local handle = gun:FindFirstChild("Handle")
+            if not handle then
+                OrionLib:MakeNotification({
+                    Name = "Tryharder Hub",
+                    Content = "Handle da arma não encontrado!",
+                    Image = "rbxassetid://7733658504",
+                    Time = 2
+                })
+                return
+            end
+
+            local originPos = handle.Position
+
+            -- ===== MÉTODO 1: GunFired (capturado no SimpleSpy) =====
+            local success = pcall(function()
+                local weaponService = game:FindFirstChild("ClientServices")
+                if weaponService then
+                    weaponService = weaponService:FindFirstChild("WeaponService")
+                    if weaponService then
+                        local gunFired = weaponService:FindFirstChild("GunFired")
+                        if gunFired and gunFired:IsA("RemoteEvent") then
+                            gunFired:FireServer(handle, originPos, targetPos, targetPart)
+                            return true
+                        end
+                    end
+                end
+                return false
+            end)
+
+            if success then
+                OrionLib:MakeNotification({
+                    Name = "Tryharder Hub",
+                    Content = "🔫 Tiro disparado contra o Murderer!",
+                    Image = "rbxassetid://7733658504",
+                    Time = 2
+                })
+                return
+            end
+
+            -- ===== MÉTODO 2: CreateBeam (fallback) =====
+            pcall(function()
+                local remote = gun:FindFirstChild("KnifeLocal"):FindFirstChild("CreateBeam"):FindFirstChild("RemoteFunction")
+                if remote then
+                    remote:InvokeServer(1, targetPos, "AH2")
+                    OrionLib:MakeNotification({
+                        Name = "Tryharder Hub",
+                        Content = "🔫 Tiro via CreateBeam!",
+                        Image = "rbxassetid://7733658504",
+                        Time = 2
+                    })
+                else
+                    OrionLib:MakeNotification({
+                        Name = "Tryharder Hub",
+                        Content = "❌ Nenhum método funcionou!",
+                        Image = "rbxassetid://7733658504",
+                        Time = 3
+                    })
+                end
+            end)
+        end
+
+        -- Criação/remoção do botão na tela
+        local guip = gethui and gethui() or game:FindFirstChild("CoreGui") or LocalPlayer:FindFirstChild("PlayerGui")
+        local function createButton()
+            if not guip then return end
+            if guip:FindFirstChild("ShootMurderBtn") then guip:FindFirstChild("ShootMurderBtn"):Destroy() end
+
+            local screenGui = Instance.new("ScreenGui")
+            screenGui.Name = "ShootMurderBtn"
+            screenGui.Parent = guip
+
+            local button = Instance.new("TextButton")
+            button.Name = "ShootBtn"
+            button.Parent = screenGui
+            button.Size = UDim2.new(0, 120, 0, 50)
+            button.Position = UDim2.new(0.5, -60, 0.5, -25)
+            button.Text = "🔫 ATIRAR"
+            button.TextColor3 = Color3.fromRGB(255, 255, 255)
+            button.TextSize = 16
+            button.Font = Enum.Font.GothamBold
+            button.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+            button.BackgroundTransparency = 0.2
+            button.BorderColor3 = Color3.fromRGB(255, 0, 0)
+            button.BorderSizePixel = 2
+            button.Draggable = true
+            button.Visible = true
+
+            local corner = Instance.new("UICorner")
+            corner.CornerRadius = UDim.new(0, 8)
+            corner.Parent = button
+
+            local stroke = Instance.new("UIStroke")
+            stroke.Color = Color3.fromRGB(255, 0, 0)
+            stroke.Thickness = 2
+            stroke.Parent = button
+
+            button.MouseButton1Click:Connect(shootMurder)
+        end
+
+        if Value then
+            createButton()
+        else
+            if guip and guip:FindFirstChild("ShootMurderBtn") then
+                guip:FindFirstChild("ShootMurderBtn"):Destroy()
+            end
+        end
+    end
+})
+
+-- ========== FLING MURDERER (CORRIGIDO) ==========
+TrollTab:AddButton({
+	Name = "Fling Murderer",
+	Callback = function()
+local Murderer = nil
+for plr, role in getRoles() do
+if role == "Murderer" then
+Murderer = Players:FindFirstChild(plr)
+break
+end
+end
+if Murderer and Murderer ~= LocalPlayer then
+    SHubFling(Murderer)
+end
+	end    
+})
+
+-- ========== FLING SHERIFF (CORRIGIDO) ==========
+TrollTab:AddButton({
+	Name = "Fling Sheriff/Hero",
+	Callback = function()
+local Target = nil
+for plr, role in getRoles() do
+if role == "Sheriff" or role == "Hero" then
+Target = Players:FindFirstChild(plr)
+break
+end
+end
+if Target and Target ~= LocalPlayer then
+    SHubFling(Target)
+end
+	end    
+})
+local function getPlayerNames()
+    local name = {}
+    for _, player in ipairs(Players:GetPlayers()) do
+         if player ~= LocalPlayer then
+            table.insert(name, player.Name)
+      end
+    end
+    return name
+end
+
+-- ========== FLING SELECT PLAYER ==========
+TrollTab:AddButton({
+    Name = "Fling Select Player",
+    Callback = function()
+        if TargetPlayer then
+            local get = Players:FindFirstChild(TargetPlayer)
+            if get and get ~= LocalPlayer then
+                SHubFling(get)
+            end
+        end
+    end
+})
+
+local TargetPlayer = nil
+local PlayerDropdown = TrollTab:AddDropdown({
+    Name = "Select Player",
+    Default = nil,
+    Options = getPlayerNames(),
+    Callback = function(Value)
+        TargetPlayer = Value
+    end
+})
+
+local function updateDropdown()
+    PlayerDropdown:Refresh(getPlayerNames(), true)
+    PlayerDropdown:Set(TargetPlayer)
+end
+
+Players.PlayerAdded:Connect(updateDropdown)
+Players.PlayerRemoving:Connect(updateDropdown)
+
+-- ========== ANTI FLING (NOCLIP PLAYERS) ==========
+TrollTab:AddToggle({
+    Name = "Anti Fling (Noclip Players)",
+    Default = false,
+    Callback = function(value)
+        env.NoclipPlr = value
+        task.spawn(function()
+            while env.NoclipPlr do
+                for _, player in pairs(Players:GetPlayers()) do
+                    if player ~= LocalPlayer and player.Character then
+                        for _, v in pairs(player.Character:GetDescendants()) do
+                            if v:IsA("BasePart") then
+                                v.CanCollide = not env.NoclipPlr
+                            end
+                        end
+                    end
+                end
+                task.wait()
+            end
+        end)
+    end
+})
+
+-- ========== TELEPORT TO MAP ==========
+TeleTab:AddButton({
+    Name = "Teleport To Map",
+    Callback = function()
+        -- Verifica se o personagem e a Root existem
+        if not Char or not Root then
+            Char = LocalPlayer.Character
+            Root = Char and (Char:FindFirstChild("HumanoidRootPart") or Char:FindFirstChild("Torso") or Char:FindFirstChild("UpperTorso"))
+        end
+        if not Char or not Root then return end
+
+        local map = Workspace:FindFirstChild("CoinContainer", true)
+        if map and map.Parent then
+            local part = map:FindFirstChildWhichIsA("BasePart", true)
+            local parts = map.Parent:FindFirstChildWhichIsA("BasePart", true)
+            if Char and part and part.CFrame then
+                Char:PivotTo(part.CFrame * CFrame.new(0, 2, 0))
+            elseif Char and parts and parts.CFrame then
+                Char:PivotTo(parts.CFrame * CFrame.new(0, 2, 0))
+            elseif Root and part and part.CFrame then
+                Root.CFrame = part.CFrame * CFrame.new(0, 2, 0)
+            elseif Root and parts and parts.CFrame then
+                Root.CFrame = parts.CFrame * CFrame.new(0, 2, 0)
+            end
+        end
+    end
+})
+
+-- ========== TELEPORT TO LOBBY (CORRIGIDO) ==========
+TeleTab:AddButton({
+    Name = "Teleport To Lobby",
+    Callback = function()
+        if not Char or not Root then
+            Char = LocalPlayer.Character
+            Root = Char and (Char:FindFirstChild("HumanoidRootPart") or Char:FindFirstChild("Torso") or Char:FindFirstChild("UpperTorso"))
+        end
+        if not Char or not Root then return end
+
+        -- Coordenadas exatas do lobby
+        local lobbyPos = Vector3.new(13.743343353271484, 504.9164123535156, -12.779833793640137)
+        local cf = CFrame.new(lobbyPos)
+
+        if Char and Char.PrimaryPart then
+            Char:PivotTo(cf)
+        else
+            Root.CFrame = cf
+        end
+
+        -- Notificação opcional
+        OrionLib:MakeNotification({
+            Name = "Tryharder Hub",
+            Content = "Teleportado para o lobby!",
+            Image = "rbxassetid://7733658504",
+            Time = 2
+        })
+    end
+})
+
+-- ========== FUNÇÕES DA ABA PERSONAGEM (CORRIGIDAS) ==========
+
+-- Função para atualizar as variáveis do personagem
+local function updateChar()
+    Char = LocalPlayer.Character
+    if Char then
+        Hum = Char:FindFirstChildWhichIsA("Humanoid")
+        Root = Char:FindFirstChild("HumanoidRootPart") or Char:FindFirstChild("Torso") or Char:FindFirstChild("UpperTorso")
+    end
+end
+
+-- Conecta o evento que atualiza as variáveis quando o personagem renasce
+LocalPlayer.CharacterAdded:Connect(function()
+    updateChar()
+    -- Reaplica as configurações ativas após renascer
+    task.wait(0.5)
+    if env.WalkEnabled and env.WalkSpeed then
+        if Hum then Hum.WalkSpeed = env.WalkSpeed end
+    end
+    if env.JumpEnabled and env.JumpPower then
+        if Hum then Hum.JumpPower = env.JumpPower end
+    end
+end)
+
+-- NOCLIP
+PlayerTab:AddToggle({
+    Name = "Noclip",
+    Default = false,
+    Callback = function(value)
+        env.Noclip = value
+        task.spawn(function()
+            while env.Noclip do
+                updateChar()
+                if Char then
+                    for _, c in pairs(Char:GetChildren()) do
+                        if c:IsA("BasePart") then
+                            c.CanCollide = not env.Noclip
+                        end
+                    end
+                end
+                task.wait()
+            end
+        end)
+    end
+})
+
+-- WALKSPEED
+PlayerTab:AddToggle({
+    Name = "Ativar Velocidade",
+    Default = false,
+    Callback = function(Value)
+        env.WalkEnabled = Value
+
+        -- Para o loop antigo se existir
+        if env.WalkLoop then
+            env.WalkLoop = false
+            task.wait(0.1)
+        end
+
+        if Value then
+            -- Aplica a velocidade atual
+            if Char and Hum and env.WalkSpeed then
+                Hum.WalkSpeed = env.WalkSpeed
+            end
+            -- Inicia o loop de manutenção
+            env.WalkLoop = true
+            task.spawn(function()
+                while env.WalkLoop and env.WalkEnabled do
+                    if Char and Hum and env.WalkSpeed then
+                        if Hum.WalkSpeed ~= env.WalkSpeed then
+                            Hum.WalkSpeed = env.WalkSpeed
+                        end
+                    end
+                    task.wait(0.1) -- verifica a cada 0.1s
+                end
+            end)
+        else
+            -- Desliga e volta ao normal
+            env.WalkLoop = false
+            if Char and Hum then
+                Hum.WalkSpeed = 16
+            end
+        end
+    end
+})
+
+PlayerTab:AddSlider({
+    Name = "WalkSpeed",
+    Min = 16,
+    Max = 350,
+    Default = 16,
+    Color = Color3.fromRGB(255,255,255),
+    Increment = 1,
+    ValueName = "Velocidade",
+    Callback = function(Value)
+        env.WalkSpeed = Value
+        if env.WalkEnabled and Char and Hum then
+            Hum.WalkSpeed = Value
+        end
+    end
+})
+
+-- JUMPPOWER
+PlayerTab:AddToggle({
+    Name = "Ativar Pulo",
+    Default = false,
+    Callback = function(Value)
+        env.JumpEnabled = Value
+        updateChar()
+        if Value and Hum and env.JumpPower then
+            Hum.JumpPower = env.JumpPower
+        elseif not Value and Hum then
+            Hum.JumpPower = 50
+        end
+    end
+})
+
+PlayerTab:AddSlider({
+    Name = "JumpPower",
+    Min = 50,
+    Max = 500,
+    Default = 50,
+    Color = Color3.fromRGB(255,255,255),
+    Increment = 1,
+    ValueName = "Potência",
+    Callback = function(Value)
+        env.JumpPower = Value
+        if env.JumpEnabled then
+            updateChar()
+            if Hum then Hum.JumpPower = Value end
+        end
+    end
+})
+
+-- INFINITY JUMP
+PlayerTab:AddToggle({
+    Name = "Infinity Jump",
+    Default = false,
+    Callback = function(Value)
+        env.InfiniteJump = Value
+        if env.JumpConnection then
+            env.JumpConnection:Disconnect()
+            env.JumpConnection = nil
+        end
+        if Value then
+            env.JumpConnection = game:GetService("UserInputService").JumpRequest:Connect(function()
+                if env.InfiniteJump then
+                    updateChar()
+                    if Hum then
+                        Hum:ChangeState("Jumping")
+                    end
+                end
+            end)
+        end
+    end
+})
+-- ========== NOTIFICAÇÃO DE INICIALIZAÇÃO ==========
+OrionLib:MakeNotification({
+    Name = "Tryharder Hub",
+    Content = "Carregado com sucesso!",
+    Image = "rbxassetid://7733658504",
+    Time = 3
+})
