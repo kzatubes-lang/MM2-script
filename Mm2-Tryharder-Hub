@@ -357,7 +357,7 @@ MainTab:AddToggle({
     end
 })
 
--- ========== TESTE: DISPARAR (SEM MIRAR) ==========
+-- ========== DISPARAR (TESTE - CORRIGIDO) ==========
 MainTab:AddToggle({
     Name = "Disparar (Teste)",
     Default = false,
@@ -365,7 +365,6 @@ MainTab:AddToggle({
         -- ===== FUNÇÃO QUE SÓ DISPARA =====
         local function shootOnly()
             if not Char then
-                print("Personagem não carregado")
                 OrionLib:MakeNotification({
                     Name = "Tryharder Hub",
                     Content = "Personagem não carregado!",
@@ -386,7 +385,6 @@ MainTab:AddToggle({
             end
 
             if not gun then
-                print("Você não tem uma arma!")
                 OrionLib:MakeNotification({
                     Name = "Tryharder Hub",
                     Content = "Pegue uma arma primeiro!",
@@ -399,7 +397,6 @@ MainTab:AddToggle({
             -- Obtém o Handle
             local handle = gun:FindFirstChild("Handle")
             if not handle then
-                print("Handle não encontrado")
                 OrionLib:MakeNotification({
                     Name = "Tryharder Hub",
                     Content = "Handle não encontrado!",
@@ -413,19 +410,18 @@ MainTab:AddToggle({
             local originPos = handle.Position
             local targetPos = originPos + Vector3.new(0, 0, -10)
 
-            -- ===== MÉTODO 1: GunFired =====
+            -- ===== MÉTODO 1: GunFired (caminho correto via ReplicatedStorage) =====
             local success = pcall(function()
-                local weaponService = game:FindFirstChild("ClientServices")
+                local weaponService = ReplicatedStorage:FindFirstChild("ClientServices")
                 if weaponService then
                     weaponService = weaponService:FindFirstChild("WeaponService")
                     if weaponService then
                         local gunFired = weaponService:FindFirstChild("GunFired")
                         if gunFired and gunFired:IsA("RemoteEvent") then
-                            gunFired:FireServer(handle, originPos, targetPos, nil)
-                            print("✅ Disparo via GunFired!")
+                            gunFired:FireServer(handle, originPos, targetPos, handle)  -- Usando handle como targetPart
                             OrionLib:MakeNotification({
                                 Name = "Tryharder Hub",
-                                Content = "✅ Disparo efetuado!",
+                                Content = "✅ Disparo (GunFired)!",
                                 Image = "rbxassetid://7733658504",
                                 Time = 2
                             })
@@ -438,12 +434,11 @@ MainTab:AddToggle({
 
             if success then return end
 
-            -- ===== MÉTODO 2: CreateBeam =====
+            -- ===== MÉTODO 2: CreateBeam (fallback) =====
             pcall(function()
                 local remote = gun:FindFirstChild("KnifeLocal"):FindFirstChild("CreateBeam"):FindFirstChild("RemoteFunction")
                 if remote then
                     remote:InvokeServer(1, targetPos, "AH2")
-                    print("✅ Disparo via CreateBeam!")
                     OrionLib:MakeNotification({
                         Name = "Tryharder Hub",
                         Content = "✅ Disparo (CreateBeam)!",
@@ -451,7 +446,6 @@ MainTab:AddToggle({
                         Time = 2
                     })
                 else
-                    print("❌ Nenhum método funcionou")
                     OrionLib:MakeNotification({
                         Name = "Tryharder Hub",
                         Content = "❌ Falha ao disparar!",
@@ -475,8 +469,8 @@ MainTab:AddToggle({
             local button = Instance.new("TextButton")
             button.Name = "ShootTest"
             button.Parent = screenGui
-            button.Size = UDim2.new(0, 100, 0, 50)
-            button.Position = UDim2.new(0.5, -50, 0.8, 0)
+            button.Size = UDim2.new(0, 120, 0, 55)
+            button.Position = UDim2.new(0.5, -60, 0.8, 0)
             button.Text = "🔫 DISPARAR"
             button.TextColor3 = Color3.fromRGB(255, 255, 255)
             button.TextSize = 16
@@ -496,16 +490,13 @@ MainTab:AddToggle({
 
         if Value then
             createButton()
-            print("🔫 Botão DISPARAR criado!")
         else
             if guip and guip:FindFirstChild("ShootTestBtn") then
                 guip:FindFirstChild("ShootTestBtn"):Destroy()
-                print("🔫 Botão DISPARAR removido!")
             end
         end
     end
 })
-
 
 -- ========== FLING MURDERER (CORRIGIDO) ==========
 TrollTab:AddButton({
