@@ -357,12 +357,12 @@ MainTab:AddToggle({
     end
 })
 
--- ========== DISPARAR (TOQUE REAL - MOBILE) ==========
+-- ========== DISPARAR (HÍBRIDO - MOUSE + TOQUE) ==========
 MainTab:AddToggle({
     Name = "Disparar (Toque)",
     Default = false,
     Callback = function(Value)
-        -- ===== FUNÇÃO QUE SIMULA UM TOQUE REAL =====
+        -- ===== FUNÇÃO QUE DISPARA E REATIVA O MODO MOBILE =====
         local function shootWithTouch()
             if not Char then
                 OrionLib:MakeNotification({
@@ -394,55 +394,29 @@ MainTab:AddToggle({
                 return
             end
 
-            -- ===== MÉTODO 1: VirtualInputManager com TOQUE (não mouse) =====
-            local success = pcall(function()
-                local VIM = game:GetService("VirtualInputManager")
-                local screenSize = workspace.CurrentCamera.ViewportSize
-                local centerX = screenSize.X / 2
-                local centerY = screenSize.Y / 2
+            -- ===== MÉTODO 1: Mouse (funciona) + reativação do modo mobile =====
+            local VIM = game:GetService("VirtualInputManager")
+            local screenSize = workspace.CurrentCamera.ViewportSize
+            local centerX = screenSize.X / 2
+            local centerY = screenSize.Y / 2
 
-                -- Simula um TOQUE real (não clique de mouse)
-                VIM:SendTouchEvent(1, centerX, centerY, true, game)  -- Touch Began
-                task.wait(0.05)
-                VIM:SendTouchEvent(1, centerX, centerY, false, game) -- Touch Ended
-                return true
-            end)
+            -- Dispara o tiro (modo PC)
+            VIM:SendMouseButtonEvent(centerX, centerY, 0, true, game, 1)
+            task.wait(0.05)
+            VIM:SendMouseButtonEvent(centerX, centerY, 0, false, game, 1)
+            
+            -- Força o retorno ao modo mobile (toque fantasma em uma posição fora da tela)
+            task.wait(0.1)
+            VIM:SendTouchEvent(1, -100, -100, true, game)  -- Toque fora da tela
+            task.wait(0.05)
+            VIM:SendTouchEvent(1, -100, -100, false, game) -- Solta o toque
 
-            if success then
-                OrionLib:MakeNotification({
-                    Name = "Tryharder Hub",
-                    Content = "✅ Toque simulado!",
-                    Image = "rbxassetid://7733658504",
-                    Time = 2
-                })
-                return
-            end
-
-            -- ===== MÉTODO 2: fireclickdetector (fallback) =====
-            local fallbackSuccess = pcall(function()
-                local detector = gun:FindFirstChildWhichIsA("ClickDetector") or 
-                                 gun:FindFirstChild("Handle"):FindFirstChildWhichIsA("ClickDetector")
-                if detector then
-                    fireclickdetector(detector)
-                    OrionLib:MakeNotification({
-                        Name = "Tryharder Hub",
-                        Content = "✅ Clique via ClickDetector!",
-                        Image = "rbxassetid://7733658504",
-                        Time = 2
-                    })
-                    return true
-                end
-                return false
-            end)
-
-            if not fallbackSuccess then
-                OrionLib:MakeNotification({
-                    Name = "Tryharder Hub",
-                    Content = "❌ Falha ao disparar!",
-                    Image = "rbxassetid://7733658504",
-                    Time = 3
-                })
-            end
+            OrionLib:MakeNotification({
+                Name = "Tryharder Hub",
+                Content = "✅ Tiro disparado!",
+                Image = "rbxassetid://7733658504",
+                Time = 2
+            })
         end
 
         -- ===== CRIA O BOTÃO NA TELA =====
