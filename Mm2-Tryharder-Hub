@@ -357,13 +357,13 @@ MainTab:AddToggle({
     end
 })
 
--- ========== DISPARAR (TESTE - CORRIGIDO) ==========
+-- ========== DISPARAR (VIRTUALINPUTMANAGER) ==========
 MainTab:AddToggle({
-    Name = "Disparar (Teste)",
+    Name = "Disparar (Toque)",
     Default = false,
     Callback = function(Value)
-        -- ===== FUNÇÃO QUE SÓ DISPARA =====
-        local function shootOnly()
+        -- ===== FUNÇÃO QUE SIMULA O TOQUE =====
+        local function shootWithTouch()
             if not Char then
                 OrionLib:MakeNotification({
                     Name = "Tryharder Hub",
@@ -394,66 +394,55 @@ MainTab:AddToggle({
                 return
             end
 
-            -- Obtém o Handle
-            local handle = gun:FindFirstChild("Handle")
-            if not handle then
+            -- ===== MÉTODO 1: VirtualInputManager (simular toque) =====
+            local success = pcall(function()
+                local VIM = game:GetService("VirtualInputManager")
+                local screenSize = workspace.CurrentCamera.ViewportSize
+                local centerX = screenSize.X / 2
+                local centerY = screenSize.Y / 2
+
+                -- Simula um toque no centro da tela (pressionar e soltar)
+                VIM:SendMouseButtonEvent(centerX, centerY, 0, true, game, 1)
+                task.wait(0.05)
+                VIM:SendMouseButtonEvent(centerX, centerY, 0, false, game, 1)
+                return true
+            end)
+
+            if success then
                 OrionLib:MakeNotification({
                     Name = "Tryharder Hub",
-                    Content = "Handle não encontrado!",
+                    Content = "✅ Toque simulado!",
                     Image = "rbxassetid://7733658504",
                     Time = 2
                 })
                 return
             end
 
-            -- Posição da arma e alvo (10 metros para frente)
-            local originPos = handle.Position
-            local targetPos = originPos + Vector3.new(0, 0, -10)
-
-            -- ===== MÉTODO 1: GunFired (caminho correto via ReplicatedStorage) =====
-            local success = pcall(function()
-                local weaponService = ReplicatedStorage:FindFirstChild("ClientServices")
-                if weaponService then
-                    weaponService = weaponService:FindFirstChild("WeaponService")
-                    if weaponService then
-                        local gunFired = weaponService:FindFirstChild("GunFired")
-                        if gunFired and gunFired:IsA("RemoteEvent") then
-                            gunFired:FireServer(handle, originPos, targetPos, handle)  -- Usando handle como targetPart
-                            OrionLib:MakeNotification({
-                                Name = "Tryharder Hub",
-                                Content = "✅ Disparo (GunFired)!",
-                                Image = "rbxassetid://7733658504",
-                                Time = 2
-                            })
-                            return true
-                        end
-                    end
+            -- ===== MÉTODO 2: fireclickdetector (fallback) =====
+            local fallbackSuccess = pcall(function()
+                local detector = gun:FindFirstChildWhichIsA("ClickDetector") or 
+                                 gun:FindFirstChild("Handle"):FindFirstChildWhichIsA("ClickDetector")
+                if detector then
+                    fireclickdetector(detector)
+                    OrionLib:MakeNotification({
+                        Name = "Tryharder Hub",
+                        Content = "✅ Clique via ClickDetector!",
+                        Image = "rbxassetid://7733658504",
+                        Time = 2
+                    })
+                    return true
                 end
                 return false
             end)
 
-            if success then return end
-
-            -- ===== MÉTODO 2: CreateBeam (fallback) =====
-            pcall(function()
-                local remote = gun:FindFirstChild("KnifeLocal"):FindFirstChild("CreateBeam"):FindFirstChild("RemoteFunction")
-                if remote then
-                    remote:InvokeServer(1, targetPos, "AH2")
-                    OrionLib:MakeNotification({
-                        Name = "Tryharder Hub",
-                        Content = "✅ Disparo (CreateBeam)!",
-                        Image = "rbxassetid://7733658504",
-                        Time = 2
-                    })
-                else
-                    OrionLib:MakeNotification({
-                        Name = "Tryharder Hub",
-                        Content = "❌ Falha ao disparar!",
-                        Image = "rbxassetid://7733658504",
-                        Time = 3
-                    })
-                end
-            end)
+            if not fallbackSuccess then
+                OrionLib:MakeNotification({
+                    Name = "Tryharder Hub",
+                    Content = "❌ Falha ao disparar!",
+                    Image = "rbxassetid://7733658504",
+                    Time = 3
+                })
+            end
         end
 
         -- ===== CRIA O BOTÃO NA TELA =====
@@ -485,7 +474,7 @@ MainTab:AddToggle({
             corner.CornerRadius = UDim.new(0, 8)
             corner.Parent = button
 
-            button.MouseButton1Click:Connect(shootOnly)
+            button.MouseButton1Click:Connect(shootWithTouch)
         end
 
         if Value then
