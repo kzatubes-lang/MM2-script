@@ -357,23 +357,37 @@ MainTab:AddToggle({
     end
 })
 
--- ========== DISPARAR (REMOTE FUNCTION - MOBILE) ==========
+-- ========== DISPARAR (APENAS REMOTES - MOBILE) ==========
 MainTab:AddToggle({
     Name = "Disparar (Toque)",
     Default = false,
     Callback = function(Value)
-        -- ===== FUNÇÃO PARA ENCONTRAR O ASSASSINO =====
+        -- ===== FUNÇÃO PARA ENCONTRAR O MURDER (USANDO getRoles) =====
         local function getMurderer()
-            for _, v in pairs(Players:GetPlayers()) do
-                if v ~= LocalPlayer then
-                    local char = v.Character
-                    local backpack = v:FindFirstChild("Backpack")
-                    -- Verifica se o jogador tem uma faca (é o assassino)
-                    if (char and char:FindFirstChild("Knife")) or (backpack and backpack:FindFirstChild("Knife")) then
-                        return v
+            local roles = getRoles()
+            for plrName, role in pairs(roles) do
+                if role == "Murderer" then
+                    local player = Players:FindFirstChild(plrName)
+                    if player and player ~= LocalPlayer then
+                        return player
                     end
                 end
             end
+            return nil
+        end
+
+        -- ===== FUNÇÃO PARA OBTER A POSIÇÃO DO MURDER =====
+        local function getMurdererPosition()
+            local murderer = getMurderer()
+            if not murderer then return nil end
+            local char = murderer.Character
+            if not char then return nil end
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if hrp then return hrp.Position end
+            local torso = char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
+            if torso then return torso.Position end
+            local head = char:FindFirstChild("Head")
+            if head then return head.Position end
             return nil
         end
 
@@ -389,7 +403,7 @@ MainTab:AddToggle({
                 return
             end
 
-            -- 1. Verifica se você tem a arma
+            -- Verifica se tem arma
             local gun = Char:FindFirstChild("Gun")
             if not gun then
                 local backpackGun = LocalPlayer:FindFirstChild("Backpack"):FindFirstChild("Gun")
@@ -409,85 +423,75 @@ MainTab:AddToggle({
                 return
             end
 
-            -- 2. Encontra o assassino
-            local murderer = getMurderer()
-            if not murderer or not murderer.Character then
+            -- Obtém a posição do Murder
+            local targetPos = getMurdererPosition()
+            if not targetPos then
                 OrionLib:MakeNotification({
                     Name = "Tryharder Hub",
-                    Content = "Assassino não encontrado!",
+                    Content = "Murder não encontrado!",
                     Image = "rbxassetid://7733658504",
                     Time = 2
                 })
                 return
             end
 
-            local targetChar = murderer.Character
-            local targetHRP = targetChar:FindFirstChild("HumanoidRootPart")
-            if not targetHRP then
-                OrionLib:MakeNotification({
-                    Name = "Tryharder Hub",
-                    Content = "Alvo não encontrado!",
-                    Image = "rbxassetid://7733658504",
-                    Time = 2
-                })
-                return
-            end
-
-            -- 3. OBTÉM O REMOTE DE TIRO (MÉTODO QUE FUNCIONA NO MOBILE)
-            local shootRemote = gun:FindFirstChild("KnifeServer")
-            if shootRemote then
-                shootRemote = shootRemote:FindFirstChild("ShootGun")
-            end
-
-            -- Fallback: tenta o caminho antigo (KnifeLocal)
-            if not shootRemote then
+            -- ===== MÉTODO 1: CreateBeam (funciona no mobile) =====
+            local fired = false
+            pcall(function()
                 local knifeLocal = gun:FindFirstChild("KnifeLocal")
                 if knifeLocal then
                     local createBeam = knifeLocal:FindFirstChild("CreateBeam")
                     if createBeam then
-                        shootRemote = createBeam:FindFirstChild("RemoteFunction")
+                        local remote = createBeam:FindFirstChild("RemoteFunction")
+                        if remote and remote:IsA("RemoteFunction") then
+                            remote:InvokeServer(1, targetPos, "AH2")
+                            fired = true
+                            OrionLib:MakeNotification({
+                                Name = "Tryharder Hub",
+                                Content = "✅ Tiro disparado (CreateBeam)!",
+                                Image = "rbxassetid://7733658504",
+                                Time = 2
+                            })
+                        end
                     end
                 end
-            end
+            end)
 
-            if shootRemote and shootRemote:IsA("RemoteFunction") then
-                -- Dispara o tiro usando InvokeServer (não afeta os controles mobile)
-                local success = pcall(function()
-                    shootRemote:InvokeServer(1, targetHRP.Position, "AH2")
-                end)
+            if fired then return end
 
-                if success then
-                    OrionLib:MakeNotification({
-                        Name = "Tryharder Hub",
-                        Content = "✅ Tiro disparado!",
-                        Image = "rbxassetid://7733658504",
-                        Time = 2
-                    })
-                else
-                    OrionLib:MakeNotification({
-                        Name = "Tryharder Hub",
-                        Content = "❌ Falha ao atirar!",
-                        Image = "rbxassetid://7733658504",
-                        Time = 2
-                    })
+            -- ===== MÉTODO 2: GunFired (via ReplicatedStorage) =====
+            pcall(function()
+                local weaponService = ReplicatedStorage:FindFirstChild("ClientServices")
+                if weaponService then
+                    weaponService = weaponService:FindFirstChild("WeaponService")
+                    if weaponService then
+                        local gunFired = weaponService:FindFirstChild("GunFired")
+                        if gunFired and gunFired:IsA("RemoteEvent") then
+                            local handle = gun:FindFirstChild("Handle")
+                            if handle then
+                                gunFired:FireServer(handle, handle.Position, targetPos, handle)
+                                fired = true
+                                OrionLib:MakeNotification({
+                                    Name = "Tryharder Hub",
+                                    Content = "✅ Tiro disparado (GunFired)!",
+                                    Image = "rbxassetid://7733658504",
+                                    Time = 2
+                                })
+                            end
+                        end
+                    end
                 end
-            else
-                -- Se nenhum remote for encontrado, tenta o método do VirtualInputManager como último recurso
-                pcall(function()
-                    local VIM = game:GetService("VirtualInputManager")
-                    local screenSize = workspace.CurrentCamera.ViewportSize
-                    VIM:SendMouseButtonEvent(screenSize.X/2, screenSize.Y/2, 0, true, game, 1)
-                    task.wait(0.05)
-                    VIM:SendMouseButtonEvent(screenSize.X/2, screenSize.Y/2, 0, false, game, 1)
-                end)
+            end)
 
-                OrionLib:MakeNotification({
-                    Name = "Tryharder Hub",
-                    Content = "⚠️ Tiro via clique (pode sumir com os botões)",
-                    Image = "rbxassetid://7733658504",
-                    Time = 2
-                })
-            end
+            if fired then return end
+
+            -- ===== NENHUM MÉTODO FUNCIONOU =====
+            OrionLib:MakeNotification({
+                Name = "Tryharder Hub",
+                Content = "❌ Nenhum remote encontrado!",
+                Image = "rbxassetid://7733658504",
+                Time = 3
+            })
         end
 
         -- ===== CRIA O BOTÃO NA TELA =====
@@ -531,6 +535,35 @@ MainTab:AddToggle({
         end
     end
 })
+
+-- ========== DISPARAR (REMOTE FUNCTION - MOBILE) ==========
+Mai
+        -- ===== CRIA O BOTÃO NA TELA =====
+        local guip = gethui and gethui() or game:FindFirstChild("CoreGui") or LocalPlayer:FindFirstChild("PlayerGui")
+        local function createButton()
+            if not guip then return end
+            if guip:FindFirstChild("ShootTestBtn") then guip:FindFirstChild("ShootTestBtn"):Destroy() end
+
+            local screenGui = Instance.new("ScreenGui")
+            screenGui.Name = "ShootTestBtn"
+            screenGui.Parent = guip
+
+            local button = Instance.new("TextButton")
+            button.Name = "ShootTest"
+            button.Parent = screenGui
+            button.Size = UDim2.new(0, 120, 0, 55)
+            button.Position = UDim2.new(0.5, -60, 0.8, 0)
+            button.Text = "🔫 ATIRAR"
+            button.TextColor3 = Color3.fromRGB(255, 255, 255)
+            button.TextSize = 16
+            button.Font = Enum.Font.GothamBold
+            button.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
+            button.BorderColor3 = Color3.fromRGB(255, 255, 255)
+            button.BorderSizePixel = 2
+            button.Draggable = true
+            button.Visible = true
+
+
 
 -- ========== FLING MURDERER (CORRIGIDO) ==========
 TrollTab:AddButton({
