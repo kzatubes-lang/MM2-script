@@ -357,12 +357,12 @@ MainTab:AddToggle({
     end
 })
 
--- ========== DISPARAR (VIRTUALINPUTMANAGER) ==========
+-- ========== DISPARAR (TOQUE REAL - MOBILE) ==========
 MainTab:AddToggle({
     Name = "Disparar (Toque)",
     Default = false,
     Callback = function(Value)
-        -- ===== FUNÇÃO QUE SIMULA O TOQUE =====
+        -- ===== FUNÇÃO QUE SIMULA UM TOQUE REAL =====
         local function shootWithTouch()
             if not Char then
                 OrionLib:MakeNotification({
@@ -394,17 +394,17 @@ MainTab:AddToggle({
                 return
             end
 
-            -- ===== MÉTODO 1: VirtualInputManager (simular toque) =====
+            -- ===== MÉTODO 1: VirtualInputManager com TOQUE (não mouse) =====
             local success = pcall(function()
                 local VIM = game:GetService("VirtualInputManager")
                 local screenSize = workspace.CurrentCamera.ViewportSize
                 local centerX = screenSize.X / 2
                 local centerY = screenSize.Y / 2
 
-                -- Simula um toque no centro da tela (pressionar e soltar)
-                VIM:SendMouseButtonEvent(centerX, centerY, 0, true, game, 1)
+                -- Simula um TOQUE real (não clique de mouse)
+                VIM:SendTouchEvent(1, centerX, centerY, true, game)  -- Touch Began
                 task.wait(0.05)
-                VIM:SendMouseButtonEvent(centerX, centerY, 0, false, game, 1)
+                VIM:SendTouchEvent(1, centerX, centerY, false, game) -- Touch Ended
                 return true
             end)
 
