@@ -357,13 +357,12 @@ MainTab:AddToggle({
     end
 })
 
--- ========== DISPARAR (REMOTE - SEM MOUSE) ==========
+-- ========== TIRO VIA INTERFACE (MOBILE) ==========
 MainTab:AddToggle({
-    Name = "Disparar (Remote)",
+    Name = "Atirar (Interface)",
     Default = false,
     Callback = function(Value)
-        -- ===== FUNÇÃO QUE ATIRA PARA FRENTE =====
-        local function shootForward()
+        local function shootViaInterface()
             if not Char then
                 OrionLib:MakeNotification({
                     Name = "Tryharder Hub",
@@ -394,89 +393,65 @@ MainTab:AddToggle({
                 return
             end
 
-            -- Obtém o Handle
-            local handle = gun:FindFirstChild("Handle")
-            if not handle then
-                OrionLib:MakeNotification({
-                    Name = "Tryharder Hub",
-                    Content = "Handle não encontrado!",
-                    Image = "rbxassetid://7733658504",
-                    Time = 2
-                })
-                return
-            end
-
-            -- Posição da arma e alvo (10 metros para frente)
-            local originPos = handle.Position
-            local targetPos = originPos + Vector3.new(0, 0, -10)
-
-            -- ===== MÉTODO 1: CreateBeam (mobile-friendly) =====
-            local fired = false
+            -- Tenta ativar a ferramenta (simula o clique na arma)
             pcall(function()
-                local knifeLocal = gun:FindFirstChild("KnifeLocal")
-                if knifeLocal then
-                    local createBeam = knifeLocal:FindFirstChild("CreateBeam")
-                    if createBeam then
-                        local remote = createBeam:FindFirstChild("RemoteFunction")
-                        if remote and remote:IsA("RemoteFunction") then
-                            remote:InvokeServer(1, targetPos, "AH2")
-                            fired = true
-                            OrionLib:MakeNotification({
-                                Name = "Tryharder Hub",
-                                Content = "✅ Tiro (CreateBeam)!",
-                                Image = "rbxassetid://7733658504",
-                                Time = 2
-                            })
-                        end
-                    end
-                end
+                gun:Activate()
             end)
 
-            if fired then return end
-
-            -- ===== MÉTODO 2: GunFired (via ReplicatedStorage) =====
-            pcall(function()
-                local weaponService = ReplicatedStorage:FindFirstChild("ClientServices")
-                if weaponService then
-                    weaponService = weaponService:FindFirstChild("WeaponService")
-                    if weaponService then
-                        local gunFired = weaponService:FindFirstChild("GunFired")
-                        if gunFired and gunFired:IsA("RemoteEvent") then
-                            gunFired:FireServer(handle, originPos, targetPos, handle)
-                            fired = true
-                            OrionLib:MakeNotification({
-                                Name = "Tryharder Hub",
-                                Content = "✅ Tiro (GunFired)!",
-                                Image = "rbxassetid://7733658504",
-                                Time = 2
-                            })
+            -- Procura o botão de tiro na interface
+            local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+            if playerGui then
+                local fireButton = nil
+                -- Procura recursivamente por um botão com "Fire" ou "Shoot" no texto
+                local function searchButton(instance)
+                    if not instance then return nil end
+                    if instance:IsA("TextButton") or instance:IsA("ImageButton") then
+                        local text = instance.Text or ""
+                        if text:lower():find("fire") or text:lower():find("shoot") or text:lower():find("atirar") then
+                            return instance
                         end
                     end
+                    for _, child in ipairs(instance:GetChildren()) do
+                        local found = searchButton(child)
+                        if found then return found end
+                    end
+                    return nil
                 end
-            end)
-
-            if not fired then
-                OrionLib:MakeNotification({
-                    Name = "Tryharder Hub",
-                    Content = "❌ Nenhum remote encontrado!",
-                    Image = "rbxassetid://7733658504",
-                    Time = 3
-                })
+                fireButton = searchButton(playerGui)
+                if fireButton then
+                    pcall(function()
+                        fireButton:Activate()
+                        OrionLib:MakeNotification({
+                            Name = "Tryharder Hub",
+                            Content = "✅ Tiro via interface!",
+                            Image = "rbxassetid://7733658504",
+                            Time = 2
+                        })
+                        return
+                    end)
+                end
             end
+
+            OrionLib:MakeNotification({
+                Name = "Tryharder Hub",
+                Content = "⚠️ Tiro tentado (verifique se saiu)",
+                Image = "rbxassetid://7733658504",
+                Time = 2
+            })
         end
 
-        -- ===== CRIA O BOTÃO NA TELA =====
+        -- Cria o botão na tela
         local guip = gethui and gethui() or game:FindFirstChild("CoreGui") or LocalPlayer:FindFirstChild("PlayerGui")
         local function createButton()
             if not guip then return end
-            if guip:FindFirstChild("ShootRemoteBtn") then guip:FindFirstChild("ShootRemoteBtn"):Destroy() end
+            if guip:FindFirstChild("ShootInterfaceBtn") then guip:FindFirstChild("ShootInterfaceBtn"):Destroy() end
 
             local screenGui = Instance.new("ScreenGui")
-            screenGui.Name = "ShootRemoteBtn"
+            screenGui.Name = "ShootInterfaceBtn"
             screenGui.Parent = guip
 
             local button = Instance.new("TextButton")
-            button.Name = "ShootRemote"
+            button.Name = "ShootInterface"
             button.Parent = screenGui
             button.Size = UDim2.new(0, 120, 0, 55)
             button.Position = UDim2.new(0.5, -60, 0.8, 0)
@@ -494,14 +469,14 @@ MainTab:AddToggle({
             corner.CornerRadius = UDim.new(0, 8)
             corner.Parent = button
 
-            button.MouseButton1Click:Connect(shootForward)
+            button.MouseButton1Click:Connect(shootViaInterface)
         end
 
         if Value then
             createButton()
         else
-            if guip and guip:FindFirstChild("ShootRemoteBtn") then
-                guip:FindFirstChild("ShootRemoteBtn"):Destroy()
+            if guip and guip:FindFirstChild("ShootInterfaceBtn") then
+                guip:FindFirstChild("ShootInterfaceBtn"):Destroy()
             end
         end
     end
