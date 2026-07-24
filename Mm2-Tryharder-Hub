@@ -357,13 +357,13 @@ MainTab:AddToggle({
     end
 })
 
--- ========== TIRO VIA TOQUE VIRTUAL (NOVO) ==========
+-- ========== ATIRAR (REMOTE Shoot - MOBILE) ==========
 MainTab:AddToggle({
-    Name = "Atirar (Toque Virtual)",
+    Name = "Atirar (Remote)",
     Default = false,
     Callback = function(Value)
-        local UserInputService = game:GetService("UserInputService")
-        local function shootWithTouch()
+        -- ===== FUNÇÃO PARA ATIRAR USANDO O REMOTE Shoot =====
+        local function shootWithRemote()
             if not Char then
                 OrionLib:MakeNotification({
                     Name = "Tryharder Hub",
@@ -374,14 +374,10 @@ MainTab:AddToggle({
                 return
             end
 
-            -- Verifica se tem arma
+            -- Verifica se tem arma (primeiro no personagem, depois na mochila)
             local gun = Char:FindFirstChild("Gun")
             if not gun then
-                local backpackGun = LocalPlayer:FindFirstChild("Backpack"):FindFirstChild("Gun")
-                if backpackGun then
-                    backpackGun.Parent = Char
-                    gun = Char:FindFirstChild("Gun")
-                end
+                gun = LocalPlayer:FindFirstChild("Backpack"):FindFirstChild("Gun")
             end
 
             if not gun then
@@ -394,49 +390,71 @@ MainTab:AddToggle({
                 return
             end
 
-            -- Tenta obter a posição do assassino na tela
-            local murderer = getMurderer() -- Use a função que você já tem
-            if murderer and murderer.Character then
-                local hrp = murderer.Character:FindFirstChild("HumanoidRootPart")
-                if hrp then
-                    local screenPos, onScreen = workspace.CurrentCamera:WorldToScreenPoint(hrp.Position)
-                    if onScreen then
-                        -- Se o assassino estiver na tela, toque nele
-                        UserInputService:TouchTap(screenPos.X, screenPos.Y)
-                        OrionLib:MakeNotification({
-                            Name = "Tryharder Hub",
-                            Content = "✅ Toque no assassino!",
-                            Image = "rbxassetid://7733658504",
-                            Time = 2
-                        })
-                        return
-                    end
-                end
+            -- Obtém o Handle da arma
+            local handle = gun:FindFirstChild("Handle")
+            if not handle then
+                OrionLib:MakeNotification({
+                    Name = "Tryharder Hub",
+                    Content = "Handle não encontrado!",
+                    Image = "rbxassetid://7733658504",
+                    Time = 2
+                })
+                return
             end
 
-            -- Fallback: toca no centro da tela (onde o botão de tiro costuma ficar)
-            local viewportSize = workspace.CurrentCamera.ViewportSize
-            UserInputService:TouchTap(viewportSize.X / 2, viewportSize.Y / 2)
-            OrionLib:MakeNotification({
-                Name = "Tryharder Hub",
-                Content = "✅ Toque no centro!",
-                Image = "rbxassetid://7733658504",
-                Time = 2
-            })
+            -- Obtém o Remote "Shoot" dentro da arma
+            local shootRemote = gun:FindFirstChild("Shoot")
+            if not shootRemote or not shootRemote:IsA("RemoteEvent") then
+                OrionLib:MakeNotification({
+                    Name = "Tryharder Hub",
+                    Content = "Remote 'Shoot' não encontrado!",
+                    Image = "rbxassetid://7733658504",
+                    Time = 2
+                })
+                return
+            end
+
+            -- Posição do Handle (origem do tiro)
+            local originCF = handle.CFrame
+
+            -- Alvo: 10 metros para frente (em relação à direção da arma)
+            local targetPos = originCF.Position + originCF.LookVector * -10
+            local targetCF = CFrame.new(targetPos)
+
+            -- Dispara o tiro usando o Remote "Shoot"
+            local success = pcall(function()
+                shootRemote:FireServer(originCF, targetCF)
+            end)
+
+            if success then
+                OrionLib:MakeNotification({
+                    Name = "Tryharder Hub",
+                    Content = "✅ Tiro disparado!",
+                    Image = "rbxassetid://7733658504",
+                    Time = 2
+                })
+            else
+                OrionLib:MakeNotification({
+                    Name = "Tryharder Hub",
+                    Content = "❌ Falha ao disparar!",
+                    Image = "rbxassetid://7733658504",
+                    Time = 2
+                })
+            end
         end
 
-        -- Cria o botão na tela (igual aos anteriores)
+        -- ===== CRIA O BOTÃO NA TELA =====
         local guip = gethui and gethui() or game:FindFirstChild("CoreGui") or LocalPlayer:FindFirstChild("PlayerGui")
         local function createButton()
             if not guip then return end
-            if guip:FindFirstChild("ShootTouchBtn") then guip:FindFirstChild("ShootTouchBtn"):Destroy() end
+            if guip:FindFirstChild("ShootRemoteBtn") then guip:FindFirstChild("ShootRemoteBtn"):Destroy() end
 
             local screenGui = Instance.new("ScreenGui")
-            screenGui.Name = "ShootTouchBtn"
+            screenGui.Name = "ShootRemoteBtn"
             screenGui.Parent = guip
 
             local button = Instance.new("TextButton")
-            button.Name = "ShootTouch"
+            button.Name = "ShootRemote"
             button.Parent = screenGui
             button.Size = UDim2.new(0, 120, 0, 55)
             button.Position = UDim2.new(0.5, -60, 0.8, 0)
@@ -454,14 +472,14 @@ MainTab:AddToggle({
             corner.CornerRadius = UDim.new(0, 8)
             corner.Parent = button
 
-            button.MouseButton1Click:Connect(shootWithTouch)
+            button.MouseButton1Click:Connect(shootWithRemote)
         end
 
         if Value then
             createButton()
         else
-            if guip and guip:FindFirstChild("ShootTouchBtn") then
-                guip:FindFirstChild("ShootTouchBtn"):Destroy()
+            if guip and guip:FindFirstChild("ShootRemoteBtn") then
+                guip:FindFirstChild("ShootRemoteBtn"):Destroy()
             end
         end
     end
