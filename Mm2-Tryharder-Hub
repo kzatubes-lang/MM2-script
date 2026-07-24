@@ -357,53 +357,72 @@ MainTab:AddToggle({
     end
 })
 
--- ========== ATIRAR NO ASSASSINO (REMOTE Shoot) ==========
+-- ========== ATIRAR NO ASSASSINO (OTIMIZADO) ==========
 MainTab:AddToggle({
     Name = "Atirar no Assassino",
     Default = false,
     Callback = function(Value)
-        -- ===== FUNÇÃO PARA ENCONTRAR O ASSASSINO =====
-        local function getMurderer()
+        -- ===== VARIÁVEIS DE CACHE =====
+        local cachedMurderer = nil
+        local cachedMurdererPos = nil
+        local lastUpdate = 0
+
+        -- ===== FUNÇÃO PARA ATUALIZAR O CACHE DO ASSASSINO =====
+        local function updateMurdererCache()
             local roles = getRoles()
             for plrName, role in pairs(roles) do
                 if role == "Murderer" then
                     local player = Players:FindFirstChild(plrName)
                     if player and player ~= LocalPlayer then
-                        return player
+                        cachedMurderer = player
+                        local char = player.Character
+                        if char then
+                            local hrp = char:FindFirstChild("HumanoidRootPart")
+                            if hrp then
+                                cachedMurdererPos = hrp.Position
+                                return
+                            end
+                            local torso = char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
+                            if torso then
+                                cachedMurdererPos = torso.Position
+                                return
+                            end
+                            local head = char:FindFirstChild("Head")
+                            if head then
+                                cachedMurdererPos = head.Position
+                                return
+                            end
+                        end
+                        cachedMurdererPos = nil
+                        return
                     end
                 end
             end
-            return nil
+            cachedMurderer = nil
+            cachedMurdererPos = nil
         end
 
-        -- ===== FUNÇÃO PARA OBTER A POSIÇÃO DO ASSASSINO =====
-        local function getMurdererPosition()
-            local murderer = getMurderer()
-            if not murderer then return nil end
-            local char = murderer.Character
-            if not char then return nil end
-            local hrp = char:FindFirstChild("HumanoidRootPart")
-            if hrp then return hrp.Position end
-            local torso = char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
-            if torso then return torso.Position end
-            local head = char:FindFirstChild("Head")
-            if head then return head.Position end
-            return nil
-        end
+        -- ===== LOOP DE ATUALIZAÇÃO DO CACHE =====
+        task.spawn(function()
+            while env.ShootMurderEnabled do
+                updateMurdererCache()
+                task.wait(0.3) -- atualiza a cada 0.3s
+            end
+        end)
 
-        -- ===== FUNÇÃO PARA ATIRAR NO ASSASSINO =====
+        -- ===== FUNÇÃO PARA ATIRAR (USANDO CACHE) =====
         local function shootMurderer()
             if not Char then
                 OrionLib:MakeNotification({
                     Name = "Tryharder Hub",
                     Content = "Personagem não carregado!",
                     Image = "rbxassetid://7733658504",
-                    Time = 2
+                    Time = 1
                 })
                 return
             end
 
-            -- Verifica se tem arma (primeiro no personagem, depois na mochila)
+            -- Verifica se tem arma
             local gun = Char:FindFirstChild("Gun")
             if not gun then
                 gun = LocalPlayer:FindFirstChild("Backpack"):FindFirstChild("Gun")
@@ -412,110 +431,190 @@ MainTab:AddToggle({
             if not gun then
                 OrionLib:MakeNotification({
                     Name = "Tryharder Hub",
-                    Content = "Pegue uma arma primeiro!",
+                    Content = "Pegue uma arma!",
                     Image = "rbxassetid://7733658504",
-                    Time = 2
+                    Time = 1
                 })
                 return
             end
 
-            -- Obtém o Handle da arma
             local handle = gun:FindFirstChild("Handle")
             if not handle then
                 OrionLib:MakeNotification({
                     Name = "Tryharder Hub",
                     Content = "Handle não encontrado!",
                     Image = "rbxassetid://7733658504",
-                    Time = 2
+                    Time = 1
                 })
                 return
             end
 
-            -- Obtém o Remote "Shoot" dentro da arma
             local shootRemote = gun:FindFirstChild("Shoot")
             if not shootRemote or not shootRemote:IsA("RemoteEvent") then
                 OrionLib:MakeNotification({
                     Name = "Tryharder Hub",
                     Content = "Remote 'Shoot' não encontrado!",
                     Image = "rbxassetid://7733658504",
-                    Time = 2
+                    Time = 1
                 })
                 return
             end
 
-            -- Obtém a posição do assassino
-            local targetPos = getMurdererPosition()
-            if not targetPos then
-                OrionLib:MakeNotification({
-                    Name = "Tryharder Hub",
-                    Content = "Assassino não encontrado!",
-                    Image = "rbxassetid://7733658504",
-                    Time = 2
-                })
-                return
+            -- Usa o cache da posição do assassino
+            if not cachedMurdererPos then
+                -- Tenta atualizar na hora se o cache estiver vazio
+                updateMurdererCache()
+                if not cachedMurdererPos then
+                    OrionLib:MakeNotification({
+                        Name = "Tryharder Hub",
+                        Content = "Assassino não encontrado!",
+                        Image = "rbxassetid://7733658504",
+                        Time = 1
+                    })
+                    return
+                end
             end
-
-            -- Cria os CFrames para o remote
-            local originCF = handle.CFrame
-            local targetCF = CFrame.new(targetPos)
 
             -- Dispara o tiro
-            local success = pcall(function()
+            local originCF = handle.CFrame
+            local targetCF = CFrame.new(cachedMurdererPos)
+
+            pcall(function()
                 shootRemote:FireServer(originCF, targetCF)
             end)
 
-            if success then
-                OrionLib:MakeNotification({
-                    Name = "Tryharder Hub",
-                    Content = "✅ Tiro no assassino!",
-                    Image = "rbxassetid://7733658504",
-                    Time = 2
-                })
-            else
-                OrionLib:MakeNotification({
-                    Name = "Tryharder Hub",
-                    Content = "❌ Falha ao atirar!",
-                    Image = "rbxassetid://7733658504",
-                    Time = 2
-                })
-            end
+            -- Feedback visual rápido (sem notificação pesada)
+            -- (O botão já pisca para dar feedback)
         end
 
-        -- ===== CRIA O BOTÃO NA TELA =====
+        -- ===== CRIA O BOTÃO NA TELA (NOVA INTERFACE) =====
         local guip = gethui and gethui() or game:FindFirstChild("CoreGui") or LocalPlayer:FindFirstChild("PlayerGui")
+        local button = nil
+        local screenGui = nil
+
         local function createButton()
             if not guip then return end
             if guip:FindFirstChild("ShootMurdererBtn") then guip:FindFirstChild("ShootMurdererBtn"):Destroy() end
 
-            local screenGui = Instance.new("ScreenGui")
+            screenGui = Instance.new("ScreenGui")
             screenGui.Name = "ShootMurdererBtn"
             screenGui.Parent = guip
 
-            local button = Instance.new("TextButton")
-            button.Name = "ShootMurderer"
+            -- Botão principal (quadrado preto)
+            button = Instance.new("TextButton")
+            button.Name = "ShootBtn"
             button.Parent = screenGui
-            button.Size = UDim2.new(0, 130, 0, 55)
-            button.Position = UDim2.new(0.5, -65, 0.8, 0)
-            button.Text = "🔫 MATAR"
-            button.TextColor3 = Color3.fromRGB(255, 255, 255)
-            button.TextSize = 16
-            button.Font = Enum.Font.GothamBold
-            button.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
-            button.BorderColor3 = Color3.fromRGB(255, 255, 255)
-            button.BorderSizePixel = 2
+            button.Size = UDim2.new(0, 120, 0, 120)
+            button.Position = UDim2.new(0.8, -60, 0.5, -60) -- canto direito centralizado
+            button.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+            button.BackgroundTransparency = 0.2
+            button.BorderSizePixel = 0
             button.Draggable = true
             button.Visible = true
+            button.AutoButtonColor = false
 
+            -- Bordas arredondadas
             local corner = Instance.new("UICorner")
-            corner.CornerRadius = UDim.new(0, 8)
+            corner.CornerRadius = UDim.new(0, 16)
             corner.Parent = button
 
-            button.MouseButton1Click:Connect(shootMurderer)
+            -- Contorno branco
+            local stroke = Instance.new("UIStroke")
+            stroke.Color = Color3.fromRGB(255, 255, 255)
+            stroke.Thickness = 2
+            stroke.Transparency = 0.3
+            stroke.Parent = button
+
+            -- ===== MIRA (4 barras) =====
+            local function createCrosshair(parent)
+                local crosshairGroup = Instance.new("Frame")
+                crosshairGroup.Name = "Crosshair"
+                crosshairGroup.Parent = parent
+                crosshairGroup.Size = UDim2.new(1, 0, 1, 0)
+                crosshairGroup.BackgroundTransparency = 1
+
+                local barSize = UDim2.new(0, 30, 0, 4)
+                local barColor = Color3.fromRGB(255, 255, 255)
+
+                -- Barra superior
+                local top = Instance.new("Frame")
+                top.Size = barSize
+                top.Position = UDim2.new(0.5, -15, 0.15, 0)
+                top.BackgroundColor3 = barColor
+                top.BackgroundTransparency = 0
+                top.Parent = crosshairGroup
+                Instance.new("UICorner", top).CornerRadius = UDim.new(1, 0)
+
+                -- Barra inferior
+                local bottom = Instance.new("Frame")
+                bottom.Size = barSize
+                bottom.Position = UDim2.new(0.5, -15, 0.85, -4)
+                bottom.BackgroundColor3 = barColor
+                bottom.BackgroundTransparency = 0
+                bottom.Parent = crosshairGroup
+                Instance.new("UICorner", bottom).CornerRadius = UDim.new(1, 0)
+
+                -- Barra esquerda
+                local left = Instance.new("Frame")
+                left.Size = UDim2.new(0, 4, 0, 30)
+                left.Position = UDim2.new(0.15, 0, 0.5, -15)
+                left.BackgroundColor3 = barColor
+                left.BackgroundTransparency = 0
+                left.Parent = crosshairGroup
+                Instance.new("UICorner", left).CornerRadius = UDim.new(1, 0)
+
+                -- Barra direita
+                local right = Instance.new("Frame")
+                right.Size = UDim2.new(0, 4, 0, 30)
+                right.Position = UDim2.new(0.85, -4, 0.5, -15)
+                right.BackgroundColor3 = barColor
+                right.BackgroundTransparency = 0
+                right.Parent = crosshairGroup
+                Instance.new("UICorner", right).CornerRadius = UDim.new(1, 0)
+
+                -- Ponto central (opcional, pequeno)
+                local dot = Instance.new("Frame")
+                dot.Size = UDim2.new(0, 6, 0, 6)
+                dot.Position = UDim2.new(0.5, -3, 0.5, -3)
+                dot.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+                dot.BackgroundTransparency = 0
+                dot.Parent = crosshairGroup
+                Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
+            end
+            createCrosshair(button)
+
+            -- ===== TEXTO INFERIOR =====
+            local textLabel = Instance.new("TextLabel")
+            textLabel.Name = "Label"
+            textLabel.Parent = button
+            textLabel.Size = UDim2.new(1, 0, 0.2, 0)
+            textLabel.Position = UDim2.new(0, 0, 0.8, 0)
+            textLabel.BackgroundTransparency = 1
+            textLabel.Text = "Shoot Murder"
+            textLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+            textLabel.TextSize = 12
+            textLabel.Font = Enum.Font.GothamBold
+            textLabel.TextScaled = true
+            textLabel.TextWrapped = true
+            textLabel.TextXAlignment = Enum.TextXAlignment.Center
+            textLabel.TextYAlignment = Enum.TextYAlignment.Center
+
+            -- ===== FEEDBACK VISUAL (piscar ao clicar) =====
+            button.MouseButton1Click:Connect(function()
+                -- Pisca o botão para dar feedback
+                button.BackgroundTransparency = 0.5
+                task.wait(0.05)
+                button.BackgroundTransparency = 0.2
+                -- Executa o tiro
+                shootMurderer()
+            end)
         end
 
         if Value then
+            env.ShootMurderEnabled = true
             createButton()
         else
+            env.ShootMurderEnabled = false
             if guip and guip:FindFirstChild("ShootMurdererBtn") then
                 guip:FindFirstChild("ShootMurdererBtn"):Destroy()
             end
