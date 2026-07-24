@@ -357,12 +357,13 @@ MainTab:AddToggle({
     end
 })
 
--- ========== TIRO VIA INTERFACE (MOBILE) ==========
+-- ========== TIRO VIA TOQUE VIRTUAL (NOVO) ==========
 MainTab:AddToggle({
-    Name = "Atirar (Interface)",
+    Name = "Atirar (Toque Virtual)",
     Default = false,
     Callback = function(Value)
-        local function shootViaInterface()
+        local UserInputService = game:GetService("UserInputService")
+        local function shootWithTouch()
             if not Char then
                 OrionLib:MakeNotification({
                     Name = "Tryharder Hub",
@@ -393,65 +394,49 @@ MainTab:AddToggle({
                 return
             end
 
-            -- Tenta ativar a ferramenta (simula o clique na arma)
-            pcall(function()
-                gun:Activate()
-            end)
-
-            -- Procura o botão de tiro na interface
-            local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-            if playerGui then
-                local fireButton = nil
-                -- Procura recursivamente por um botão com "Fire" ou "Shoot" no texto
-                local function searchButton(instance)
-                    if not instance then return nil end
-                    if instance:IsA("TextButton") or instance:IsA("ImageButton") then
-                        local text = instance.Text or ""
-                        if text:lower():find("fire") or text:lower():find("shoot") or text:lower():find("atirar") then
-                            return instance
-                        end
-                    end
-                    for _, child in ipairs(instance:GetChildren()) do
-                        local found = searchButton(child)
-                        if found then return found end
-                    end
-                    return nil
-                end
-                fireButton = searchButton(playerGui)
-                if fireButton then
-                    pcall(function()
-                        fireButton:Activate()
+            -- Tenta obter a posição do assassino na tela
+            local murderer = getMurderer() -- Use a função que você já tem
+            if murderer and murderer.Character then
+                local hrp = murderer.Character:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    local screenPos, onScreen = workspace.CurrentCamera:WorldToScreenPoint(hrp.Position)
+                    if onScreen then
+                        -- Se o assassino estiver na tela, toque nele
+                        UserInputService:TouchTap(screenPos.X, screenPos.Y)
                         OrionLib:MakeNotification({
                             Name = "Tryharder Hub",
-                            Content = "✅ Tiro via interface!",
+                            Content = "✅ Toque no assassino!",
                             Image = "rbxassetid://7733658504",
                             Time = 2
                         })
                         return
-                    end)
+                    end
                 end
             end
 
+            -- Fallback: toca no centro da tela (onde o botão de tiro costuma ficar)
+            local viewportSize = workspace.CurrentCamera.ViewportSize
+            UserInputService:TouchTap(viewportSize.X / 2, viewportSize.Y / 2)
             OrionLib:MakeNotification({
                 Name = "Tryharder Hub",
-                Content = "⚠️ Tiro tentado (verifique se saiu)",
+                Content = "✅ Toque no centro!",
                 Image = "rbxassetid://7733658504",
                 Time = 2
             })
         end
 
-        -- Cria o botão na tela
+        -- Cria o botão na tela (igual aos anteriores)
         local guip = gethui and gethui() or game:FindFirstChild("CoreGui") or LocalPlayer:FindFirstChild("PlayerGui")
         local function createButton()
             if not guip then return end
-            if guip:FindFirstChild("ShootInterfaceBtn") then guip:FindFirstChild("ShootInterfaceBtn"):Destroy() end
+            if guip:FindFirstChild("ShootTouchBtn") then guip:FindFirstChild("ShootTouchBtn"):Destroy() end
 
             local screenGui = Instance.new("ScreenGui")
-            screenGui.Name = "ShootInterfaceBtn"
+            screenGui.Name = "ShootTouchBtn"
             screenGui.Parent = guip
 
             local button = Instance.new("TextButton")
-            button.Name = "ShootInterface"
+            button.Name = "ShootTouch"
             button.Parent = screenGui
             button.Size = UDim2.new(0, 120, 0, 55)
             button.Position = UDim2.new(0.5, -60, 0.8, 0)
@@ -469,14 +454,14 @@ MainTab:AddToggle({
             corner.CornerRadius = UDim.new(0, 8)
             corner.Parent = button
 
-            button.MouseButton1Click:Connect(shootViaInterface)
+            button.MouseButton1Click:Connect(shootWithTouch)
         end
 
         if Value then
             createButton()
         else
-            if guip and guip:FindFirstChild("ShootInterfaceBtn") then
-                guip:FindFirstChild("ShootInterfaceBtn"):Destroy()
+            if guip and guip:FindFirstChild("ShootTouchBtn") then
+                guip:FindFirstChild("ShootTouchBtn"):Destroy()
             end
         end
     end
