@@ -357,13 +357,42 @@ MainTab:AddToggle({
     end
 })
 
--- ========== ATIRAR (REMOTE Shoot - MOBILE) ==========
+-- ========== ATIRAR NO ASSASSINO (REMOTE Shoot) ==========
 MainTab:AddToggle({
-    Name = "Atirar (Remote)",
+    Name = "Atirar no Assassino",
     Default = false,
     Callback = function(Value)
-        -- ===== FUNÇÃO PARA ATIRAR USANDO O REMOTE Shoot =====
-        local function shootWithRemote()
+        -- ===== FUNÇÃO PARA ENCONTRAR O ASSASSINO =====
+        local function getMurderer()
+            local roles = getRoles()
+            for plrName, role in pairs(roles) do
+                if role == "Murderer" then
+                    local player = Players:FindFirstChild(plrName)
+                    if player and player ~= LocalPlayer then
+                        return player
+                    end
+                end
+            end
+            return nil
+        end
+
+        -- ===== FUNÇÃO PARA OBTER A POSIÇÃO DO ASSASSINO =====
+        local function getMurdererPosition()
+            local murderer = getMurderer()
+            if not murderer then return nil end
+            local char = murderer.Character
+            if not char then return nil end
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if hrp then return hrp.Position end
+            local torso = char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
+            if torso then return torso.Position end
+            local head = char:FindFirstChild("Head")
+            if head then return head.Position end
+            return nil
+        end
+
+        -- ===== FUNÇÃO PARA ATIRAR NO ASSASSINO =====
+        local function shootMurderer()
             if not Char then
                 OrionLib:MakeNotification({
                     Name = "Tryharder Hub",
@@ -414,14 +443,23 @@ MainTab:AddToggle({
                 return
             end
 
-            -- Posição do Handle (origem do tiro)
-            local originCF = handle.CFrame
+            -- Obtém a posição do assassino
+            local targetPos = getMurdererPosition()
+            if not targetPos then
+                OrionLib:MakeNotification({
+                    Name = "Tryharder Hub",
+                    Content = "Assassino não encontrado!",
+                    Image = "rbxassetid://7733658504",
+                    Time = 2
+                })
+                return
+            end
 
-            -- Alvo: 10 metros para frente (em relação à direção da arma)
-            local targetPos = originCF.Position + originCF.LookVector * -10
+            -- Cria os CFrames para o remote
+            local originCF = handle.CFrame
             local targetCF = CFrame.new(targetPos)
 
-            -- Dispara o tiro usando o Remote "Shoot"
+            -- Dispara o tiro
             local success = pcall(function()
                 shootRemote:FireServer(originCF, targetCF)
             end)
@@ -429,14 +467,14 @@ MainTab:AddToggle({
             if success then
                 OrionLib:MakeNotification({
                     Name = "Tryharder Hub",
-                    Content = "✅ Tiro disparado!",
+                    Content = "✅ Tiro no assassino!",
                     Image = "rbxassetid://7733658504",
                     Time = 2
                 })
             else
                 OrionLib:MakeNotification({
                     Name = "Tryharder Hub",
-                    Content = "❌ Falha ao disparar!",
+                    Content = "❌ Falha ao atirar!",
                     Image = "rbxassetid://7733658504",
                     Time = 2
                 })
@@ -447,18 +485,18 @@ MainTab:AddToggle({
         local guip = gethui and gethui() or game:FindFirstChild("CoreGui") or LocalPlayer:FindFirstChild("PlayerGui")
         local function createButton()
             if not guip then return end
-            if guip:FindFirstChild("ShootRemoteBtn") then guip:FindFirstChild("ShootRemoteBtn"):Destroy() end
+            if guip:FindFirstChild("ShootMurdererBtn") then guip:FindFirstChild("ShootMurdererBtn"):Destroy() end
 
             local screenGui = Instance.new("ScreenGui")
-            screenGui.Name = "ShootRemoteBtn"
+            screenGui.Name = "ShootMurdererBtn"
             screenGui.Parent = guip
 
             local button = Instance.new("TextButton")
-            button.Name = "ShootRemote"
+            button.Name = "ShootMurderer"
             button.Parent = screenGui
-            button.Size = UDim2.new(0, 120, 0, 55)
-            button.Position = UDim2.new(0.5, -60, 0.8, 0)
-            button.Text = "🔫 ATIRAR"
+            button.Size = UDim2.new(0, 130, 0, 55)
+            button.Position = UDim2.new(0.5, -65, 0.8, 0)
+            button.Text = "🔫 MATAR"
             button.TextColor3 = Color3.fromRGB(255, 255, 255)
             button.TextSize = 16
             button.Font = Enum.Font.GothamBold
@@ -472,14 +510,14 @@ MainTab:AddToggle({
             corner.CornerRadius = UDim.new(0, 8)
             corner.Parent = button
 
-            button.MouseButton1Click:Connect(shootWithRemote)
+            button.MouseButton1Click:Connect(shootMurderer)
         end
 
         if Value then
             createButton()
         else
-            if guip and guip:FindFirstChild("ShootRemoteBtn") then
-                guip:FindFirstChild("ShootRemoteBtn"):Destroy()
+            if guip and guip:FindFirstChild("ShootMurdererBtn") then
+                guip:FindFirstChild("ShootMurdererBtn"):Destroy()
             end
         end
     end
