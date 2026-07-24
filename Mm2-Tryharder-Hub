@@ -357,43 +357,39 @@ MainTab:AddToggle({
     end
 })
 
--- ========== ATIRAR NO ASSASSINO (OTIMIZADO + SLIDER) ==========
+-- ========== ATIRAR NO ASSASSINO (COM PREDICT) ==========
 local shootButtonRef = nil
 local shootScreenGuiRef = nil
 local shootButtonSize = 120
 
--- ===== FUNÇÃO PARA ENCONTRAR O ASSASSINO =====
-local function getMurderer()
-    local roles = getRoles()
-    for plrName, role in pairs(roles) do
-        if role == "Murderer" then
-            local player = Players:FindFirstChild(plrName)
-            if player and player ~= LocalPlayer then
-                return player
-            end
-        end
-    end
-    return nil
-end
-
--- ===== CACHE DA POSIÇÃO DO ASSASSINO =====
+-- ===== VARIÁVEIS DE CACHE DO ASSASSINO =====
 local cachedMurdererPos = nil
+local cachedMurdererVel = nil
 local cacheValid = false
 
--- ===== LOOP DE ATUALIZAÇÃO DO CACHE =====
+-- ===== LOOP DE ATUALIZAÇÃO DO CACHE (POSIÇÃO + VELOCIDADE) =====
 task.spawn(function()
     while true do
         if env.ShootMurderEnabled then
-            local murderer = getMurderer()
+            local murderer = nil
+            local roles = getRoles()
+            for plrName, role in pairs(roles) do
+                if role == "Murderer" then
+                    murderer = Players:FindFirstChild(plrName)
+                    break
+                end
+            end
             if murderer and murderer.Character then
                 local hrp = murderer.Character:FindFirstChild("HumanoidRootPart")
                 if hrp then
                     cachedMurdererPos = hrp.Position
+                    cachedMurdererVel = hrp.Velocity
                     cacheValid = true
                 else
                     local torso = murderer.Character:FindFirstChild("Torso") or murderer.Character:FindFirstChild("UpperTorso")
                     if torso then
                         cachedMurdererPos = torso.Position
+                        cachedMurdererVel = Vector3.new(0,0,0)
                         cacheValid = true
                     else
                         cacheValid = false
@@ -403,22 +399,50 @@ task.spawn(function()
                 cacheValid = false
             end
         end
-        task.wait(0.1) -- atualiza a cada 0.1s (rápido o suficiente)
+        task.wait(0.1) -- atualização rápida
     end
 end)
 
--- ===== FUNÇÃO PARA OBTER A POSIÇÃO (USANDO CACHE) =====
+-- ===== FUNÇÃO PARA OBTER A POSIÇÃO DO ASSASSINO (COM PREDICT) =====
 local function getMurdererPosition()
+    -- Se o cache estiver válido, usa ele
     if cacheValid and cachedMurdererPos then
-        return cachedMurdererPos
+        -- Aplica o Predict se estiver ativado
+        if env.PredictEnabled then
+            local tempoVoo = 0.12 -- tempo de voo do tiro (ajuste fixo)
+            local posAtual = cachedMurdererPos
+            local vel = cachedMurdererVel or Vector3.new(0,0,0)
+            -- Previsão: posição atual + (velocidade * tempo de voo)
+            local posPrevista = posAtual + (vel * tempoVoo)
+            return posPrevista
+        else
+            -- Sem predict: usa a posição atual
+            return cachedMurdererPos
+        end
     end
-    -- Fallback: chama a função síncrona se o cache estiver vazio
-    local murderer = getMurderer()
+
+    -- ===== FALLBACK (caso o cache esteja vazio) =====
+    local murderer = nil
+    local roles = getRoles()
+    for plrName, role in pairs(roles) do
+        if role == "Murderer" then
+            murderer = Players:FindFirstChild(plrName)
+            break
+        end
+    end
     if not murderer then return nil end
     local char = murderer.Character
     if not char then return nil end
     local hrp = char:FindFirstChild("HumanoidRootPart")
-    if hrp then return hrp.Position end
+    if hrp then
+        local pos = hrp.Position
+        if env.PredictEnabled then
+            local vel = hrp.Velocity
+            local tempoVoo = 0.12
+            pos = pos + (vel * tempoVoo)
+        end
+        return pos
+    end
     local torso = char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
     if torso then return torso.Position end
     local head = char:FindFirstChild("Head")
@@ -475,7 +499,7 @@ local function shootMurderer()
         return
     end
 
-    -- Obtém a posição do assassino (usando cache)
+    -- Obtém a posição do assassino (com ou sem predict)
     local targetPos = getMurdererPosition()
     if not targetPos then
         OrionLib:MakeNotification({
@@ -629,6 +653,30 @@ MainTab:AddToggle({
             end
             shootButtonRef = nil
             shootScreenGuiRef = nil
+        end
+    end
+})
+
+-- ===== TOGGLE DO PREDICT =====
+MainTab:AddToggle({
+    Name = "Predict (Prever movimento)",
+    Default = false,
+    Callback = function(Value)
+        env.PredictEnabled = Value
+        if Value then
+            OrionLib:MakeNotification({
+                Name = "Tryharder Hub",
+                Content = "Predict ativado!",
+                Image = "rbxassetid://7733658504",
+                Time = 1
+            })
+        else
+            OrionLib:MakeNotification({
+                Name = "Tryharder Hub",
+                Content = "Predict desativado.",
+                Image = "rbxassetid://7733658504",
+                Time = 1
+            })
         end
     end
 })
