@@ -699,6 +699,220 @@ MainTab:AddSlider({
     end
 })
 
+-- ========== KILL ALL (KILL AURA - MURDER) ==========
+local killButtonRef = nil
+local killScreenGuiRef = nil
+local killButtonSize = 120
+
+-- ===== FUNÇÃO PARA MATAR TODOS (KILL AURA) =====
+local function killAll()
+    if not Char then
+        OrionLib:MakeNotification({
+            Name = "Tryharder Hub",
+            Content = "Personagem não carregado!",
+            Image = "rbxassetid://7733658504",
+            Time = 2
+        })
+        return
+    end
+
+    -- Verifica se tem a faca
+    local knife = Char:FindFirstChild("Knife")
+    if not knife then
+        knife = LocalPlayer:FindFirstChild("Backpack"):FindFirstChild("Knife")
+        if knife then
+            knife.Parent = Char
+            knife = Char:FindFirstChild("Knife")
+        end
+    end
+    if not knife then
+        OrionLib:MakeNotification({
+            Name = "Tryharder Hub",
+            Content = "Você não é o Murder!",
+            Image = "rbxassetid://7733658504",
+            Time = 2
+        })
+        return
+    end
+
+    -- Obtém o Handle da faca (para usar no firetouchinterest)
+    local handle = knife:FindFirstChild("Handle")
+    if not handle then
+        OrionLib:MakeNotification({
+            Name = "Tryharder Hub",
+            Content = "Handle da faca não encontrado!",
+            Image = "rbxassetid://7733658504",
+            Time = 2
+        })
+        return
+    end
+
+    -- Lista de jogadores vivos (exceto você)
+    local playersToKill = {}
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character then
+            local humanoid = p.Character:FindFirstChildOfClass("Humanoid")
+            if humanoid and humanoid.Health > 0 then
+                table.insert(playersToKill, p)
+            end
+        end
+    end
+
+    if #playersToKill == 0 then
+        OrionLib:MakeNotification({
+            Name = "Tryharder Hub",
+            Content = "Nenhum jogador vivo!",
+            Image = "rbxassetid://7733658504",
+            Time = 2
+        })
+        return
+    end
+
+    local killedCount = 0
+
+    -- Mata cada jogador
+    for _, p in ipairs(playersToKill) do
+        local targetChar = p.Character
+        if targetChar then
+            local targetHRP = targetChar:FindFirstChild("HumanoidRootPart")
+            if targetHRP then
+                -- Usa firetouchinterest para simular o toque da faca
+                pcall(function()
+                    firetouchinterest(handle, targetHRP, 0) -- touch begin
+                    task.wait(0.02)
+                    firetouchinterest(handle, targetHRP, 1) -- touch end
+                    killedCount = killedCount + 1
+                end)
+            end
+        end
+        task.wait(0.05) -- pequeno delay para não sobrecarregar
+    end
+
+    -- Notificação
+    OrionLib:MakeNotification({
+        Name = "Tryharder Hub",
+        Content = "💀 " .. killedCount .. " jogadores mortos!",
+        Image = "rbxassetid://7733658504",
+        Time = 3
+    })
+end
+
+-- ===== FUNÇÃO PARA CRIAR O BOTÃO KILL ALL =====
+local function createKillButton()
+    local guip = gethui and gethui() or game:FindFirstChild("CoreGui") or LocalPlayer:FindFirstChild("PlayerGui")
+    if not guip then return end
+    if guip:FindFirstChild("KillAllBtn") then guip:FindFirstChild("KillAllBtn"):Destroy() end
+
+    killScreenGuiRef = Instance.new("ScreenGui")
+    killScreenGuiRef.Name = "KillAllBtn"
+    killScreenGuiRef.Parent = guip
+
+    local button = Instance.new("ImageButton")
+    button.Name = "KillBtn"
+    button.Parent = killScreenGuiRef
+    button.Size = UDim2.new(0, killButtonSize, 0, killButtonSize)
+    button.Position = UDim2.new(0.2, -killButtonSize/2, 0.5, -killButtonSize/2) -- lado esquerdo
+    button.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    button.BackgroundTransparency = 0.3
+    button.BorderSizePixel = 0
+    button.Draggable = true
+    button.Visible = true
+    button.Image = ""
+    button.AutoButtonColor = false
+
+    -- Bordas arredondadas
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 16)
+    corner.Parent = button
+
+    -- Contorno branco
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(255, 255, 255)
+    stroke.Thickness = 2
+    stroke.Transparency = 0.3
+    stroke.Parent = button
+
+    -- ===== ÍCONE DA FACA =====
+    local knifeIcon = Instance.new("TextLabel")
+    knifeIcon.Name = "KnifeIcon"
+    knifeIcon.Parent = button
+    knifeIcon.Size = UDim2.new(1, 0, 0.6, 0)
+    knifeIcon.Position = UDim2.new(0, 0, 0.1, 0)
+    knifeIcon.BackgroundTransparency = 1
+    knifeIcon.Text = "🔪"
+    knifeIcon.TextColor3 = Color3.fromRGB(255, 255, 255)
+    knifeIcon.TextSize = 50
+    knifeIcon.Font = Enum.Font.GothamBold
+    knifeIcon.TextScaled = true
+    knifeIcon.TextWrapped = true
+    knifeIcon.TextXAlignment = Enum.TextXAlignment.Center
+    knifeIcon.TextYAlignment = Enum.TextYAlignment.Center
+
+    -- ===== TEXTO INFERIOR =====
+    local textLabel = Instance.new("TextLabel")
+    textLabel.Name = "Label"
+    textLabel.Parent = button
+    textLabel.Size = UDim2.new(1, 0, 0.25, 0)
+    textLabel.Position = UDim2.new(0, 0, 0.75, 0)
+    textLabel.BackgroundTransparency = 1
+    textLabel.Text = "Kill All"
+    textLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    textLabel.TextSize = 12
+    textLabel.Font = Enum.Font.GothamBold
+    textLabel.TextScaled = true
+    textLabel.TextWrapped = true
+    textLabel.TextXAlignment = Enum.TextXAlignment.Center
+    textLabel.TextYAlignment = Enum.TextYAlignment.Center
+
+    -- ===== FEEDBACK VISUAL =====
+    button.MouseButton1Click:Connect(function()
+        button.BackgroundTransparency = 0.6
+        task.wait(0.05)
+        button.BackgroundTransparency = 0.3
+        killAll()
+    end)
+
+    killButtonRef = button
+end
+
+-- ===== TOGGLE PARA ATIVAR O KILL ALL =====
+MainTab:AddToggle({
+    Name = "Kill All (Murder)",
+    Default = false,
+    Callback = function(Value)
+        env.KillAllEnabled = Value
+        if Value then
+            createKillButton()
+        else
+            env.KillAllEnabled = false
+            local guip = gethui and gethui() or game:FindFirstChild("CoreGui") or LocalPlayer:FindFirstChild("PlayerGui")
+            if guip and guip:FindFirstChild("KillAllBtn") then
+                guip:FindFirstChild("KillAllBtn"):Destroy()
+            end
+            killButtonRef = nil
+            killScreenGuiRef = nil
+        end
+    end
+})
+
+-- ===== SLIDER PARA AJUSTAR O TAMANHO DO BOTÃO =====
+MainTab:AddSlider({
+    Name = "Tamanho do Botão (Kill)",
+    Min = 80,
+    Max = 200,
+    Default = 120,
+    Color = Color3.fromRGB(255, 255, 255),
+    Increment = 5,
+    ValueName = "px",
+    Callback = function(Value)
+        killButtonSize = Value
+        if killButtonRef then
+            killButtonRef.Size = UDim2.new(0, killButtonSize, 0, killButtonSize)
+            killButtonRef.Position = UDim2.new(0.2, -killButtonSize/2, 0.5, -killButtonSize/2)
+        end
+    end
+})
+
 -- ========== FLING MURDERER (CORRIGIDO) ==========
 TrollTab:AddButton({
 	Name = "Fling Murderer",
