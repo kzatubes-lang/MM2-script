@@ -699,12 +699,12 @@ MainTab:AddSlider({
     end
 })
 
--- ========== KILL ALL (MURDER - COM EVENTO CORRETO) ==========
+-- ========== KILL ALL (MURDER - VERSÃO CORRIGIDA) ==========
 local killButtonRef = nil
 local killScreenGuiRef = nil
 local killButtonSize = 120
 
--- ===== FUNÇÃO PARA MATAR TODOS USANDO O REMOTE KnifeStabbed =====
+-- ===== FUNÇÃO PARA MATAR TODOS =====
 local function killAll()
     if not Char then
         OrionLib:MakeNotification({
@@ -716,7 +716,7 @@ local function killAll()
         return
     end
 
-    -- Verifica se tem a faca
+    -- Verifica se tem a faca (no personagem ou na mochila)
     local knife = Char:FindFirstChild("Knife")
     if not knife then
         knife = LocalPlayer:FindFirstChild("Backpack"):FindFirstChild("Knife")
@@ -735,12 +735,23 @@ local function killAll()
         return
     end
 
-    -- Obtém o evento KnifeStabbed
-    local knifeStabbed = knife:FindFirstChild("Events"):FindFirstChild("KnifeStabbed")
+    -- Obtém o evento KnifeStabbed (agora usando o caminho correto)
+    local events = knife:FindFirstChild("Events")
+    if not events then
+        OrionLib:MakeNotification({
+            Name = "Tryharder Hub",
+            Content = "Events não encontrado!",
+            Image = "rbxassetid://7733658504",
+            Time = 2
+        })
+        return
+    end
+
+    local knifeStabbed = events:FindFirstChild("KnifeStabbed")
     if not knifeStabbed then
         OrionLib:MakeNotification({
             Name = "Tryharder Hub",
-            Content = "Evento KnifeStabbed não encontrado!",
+            Content = "KnifeStabbed não encontrado!",
             Image = "rbxassetid://7733658504",
             Time = 2
         })
@@ -770,32 +781,88 @@ local function killAll()
 
     local killedCount = 0
 
-    -- Para cada jogador, dispara o evento KnifeStabbed apontando para ele
+    -- ===== TENTA MATAR CADA JOGADOR =====
     for _, p in ipairs(playersToKill) do
         local targetChar = p.Character
         if targetChar then
             local targetHRP = targetChar:FindFirstChild("HumanoidRootPart")
             if targetHRP then
-                pcall(function()
-                    -- Tenta invocar o evento (se for RemoteEvent/RemoteFunction)
-                    if knifeStabbed:IsA("RemoteEvent") then
+                local success = false
+
+                -- MÉTODO 1: RemoteEvent (FireServer)
+                if knifeStabbed:IsA("RemoteEvent") then
+                    pcall(function()
+                        -- Tenta diferentes combinações de parâmetros
                         knifeStabbed:FireServer(targetHRP)
-                    elseif knifeStabbed:IsA("RemoteFunction") then
+                        success = true
+                    end)
+                    if not success then
+                        pcall(function()
+                            knifeStabbed:FireServer(targetHRP.Position)
+                            success = true
+                        end)
+                    end
+                    if not success then
+                        pcall(function()
+                            knifeStabbed:FireServer(targetChar)
+                            success = true
+                        end)
+                    end
+                    if not success then
+                        pcall(function()
+                            knifeStabbed:FireServer()
+                            success = true
+                        end)
+                    end
+                end
+
+                -- MÉTODO 2: RemoteFunction (InvokeServer)
+                if not success and knifeStabbed:IsA("RemoteFunction") then
+                    pcall(function()
                         knifeStabbed:InvokeServer(targetHRP)
-                    else
-                        -- Fallback: firetouchinterest
-                        local handle = knife:FindFirstChild("Handle")
-                        if handle then
+                        success = true
+                    end)
+                    if not success then
+                        pcall(function()
+                            knifeStabbed:InvokeServer(targetHRP.Position)
+                            success = true
+                        end)
+                    end
+                    if not success then
+                        pcall(function()
+                            knifeStabbed:InvokeServer()
+                            success = true
+                        end)
+                    end
+                end
+
+                -- MÉTODO 3: Fallback com firetouchinterest
+                if not success then
+                    local handle = knife:FindFirstChild("Handle")
+                    if handle then
+                        pcall(function()
                             firetouchinterest(handle, targetHRP, 0)
                             task.wait(0.02)
                             firetouchinterest(handle, targetHRP, 1)
-                        end
+                            success = true
+                        end)
                     end
+                end
+
+                -- MÉTODO 4: Fallback com Activate
+                if not success then
+                    pcall(function()
+                        knife:Activate()
+                        success = true
+                    end)
+                end
+
+                if success then
                     killedCount = killedCount + 1
-                end)
+                end
             end
         end
-        task.wait(0.05) -- pequeno delay para não sobrecarregar
+        task.wait(0.03) -- delay pequeno
     end
 
     OrionLib:MakeNotification({
