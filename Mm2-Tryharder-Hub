@@ -716,7 +716,7 @@ local function killAll()
         return
     end
 
-    -- Verifica se tem a faca (no personagem ou na mochila)
+    -- Verifica se tem a faca
     local knife = Char:FindFirstChild("Knife")
     if not knife then
         knife = LocalPlayer:FindFirstChild("Backpack"):FindFirstChild("Knife")
@@ -735,7 +735,7 @@ local function killAll()
         return
     end
 
-    -- Obtém o evento KnifeStabbed (agora usando o caminho correto)
+    -- Obtém o evento KnifeStabbed
     local events = knife:FindFirstChild("Events")
     if not events then
         OrionLib:MakeNotification({
@@ -781,88 +781,23 @@ local function killAll()
 
     local killedCount = 0
 
-    -- ===== TENTA MATAR CADA JOGADOR =====
+    -- ===== MATA CADA JOGADOR USANDO KnifeStabbed:FireServer() =====
     for _, p in ipairs(playersToKill) do
         local targetChar = p.Character
         if targetChar then
             local targetHRP = targetChar:FindFirstChild("HumanoidRootPart")
             if targetHRP then
-                local success = false
-
-                -- MÉTODO 1: RemoteEvent (FireServer)
-                if knifeStabbed:IsA("RemoteEvent") then
-                    pcall(function()
-                        -- Tenta diferentes combinações de parâmetros
-                        knifeStabbed:FireServer(targetHRP)
-                        success = true
-                    end)
-                    if not success then
-                        pcall(function()
-                            knifeStabbed:FireServer(targetHRP.Position)
-                            success = true
-                        end)
-                    end
-                    if not success then
-                        pcall(function()
-                            knifeStabbed:FireServer(targetChar)
-                            success = true
-                        end)
-                    end
-                    if not success then
-                        pcall(function()
-                            knifeStabbed:FireServer()
-                            success = true
-                        end)
-                    end
-                end
-
-                -- MÉTODO 2: RemoteFunction (InvokeServer)
-                if not success and knifeStabbed:IsA("RemoteFunction") then
-                    pcall(function()
-                        knifeStabbed:InvokeServer(targetHRP)
-                        success = true
-                    end)
-                    if not success then
-                        pcall(function()
-                            knifeStabbed:InvokeServer(targetHRP.Position)
-                            success = true
-                        end)
-                    end
-                    if not success then
-                        pcall(function()
-                            knifeStabbed:InvokeServer()
-                            success = true
-                        end)
-                    end
-                end
-
-                -- MÉTODO 3: Fallback com firetouchinterest
-                if not success then
-                    local handle = knife:FindFirstChild("Handle")
-                    if handle then
-                        pcall(function()
-                            firetouchinterest(handle, targetHRP, 0)
-                            task.wait(0.02)
-                            firetouchinterest(handle, targetHRP, 1)
-                            success = true
-                        end)
-                    end
-                end
-
-                -- MÉTODO 4: Fallback com Activate
-                if not success then
-                    pcall(function()
-                        knife:Activate()
-                        success = true
-                    end)
-                end
+                -- Tenta matar com KnifeStabbed (sem parâmetros)
+                local success = pcall(function()
+                    knifeStabbed:FireServer()
+                end)
 
                 if success then
                     killedCount = killedCount + 1
                 end
             end
         end
-        task.wait(0.03) -- delay pequeno
+        task.wait(0.03)
     end
 
     OrionLib:MakeNotification({
