@@ -699,12 +699,12 @@ MainTab:AddSlider({
     end
 })
 
--- ========== KILL ALL (KILL AURA - MURDER) ==========
+-- ========== KILL ALL (MURDER - COM EVENTO CORRETO) ==========
 local killButtonRef = nil
 local killScreenGuiRef = nil
 local killButtonSize = 120
 
--- ===== FUNÇÃO PARA MATAR TODOS (KILL AURA) =====
+-- ===== FUNÇÃO PARA MATAR TODOS USANDO O REMOTE KnifeStabbed =====
 local function killAll()
     if not Char then
         OrionLib:MakeNotification({
@@ -735,12 +735,12 @@ local function killAll()
         return
     end
 
-    -- Obtém o Handle da faca (para usar no firetouchinterest)
-    local handle = knife:FindFirstChild("Handle")
-    if not handle then
+    -- Obtém o evento KnifeStabbed
+    local knifeStabbed = knife:FindFirstChild("Events"):FindFirstChild("KnifeStabbed")
+    if not knifeStabbed then
         OrionLib:MakeNotification({
             Name = "Tryharder Hub",
-            Content = "Handle da faca não encontrado!",
+            Content = "Evento KnifeStabbed não encontrado!",
             Image = "rbxassetid://7733658504",
             Time = 2
         })
@@ -770,17 +770,27 @@ local function killAll()
 
     local killedCount = 0
 
-    -- Mata cada jogador
+    -- Para cada jogador, dispara o evento KnifeStabbed apontando para ele
     for _, p in ipairs(playersToKill) do
         local targetChar = p.Character
         if targetChar then
             local targetHRP = targetChar:FindFirstChild("HumanoidRootPart")
             if targetHRP then
-                -- Usa firetouchinterest para simular o toque da faca
                 pcall(function()
-                    firetouchinterest(handle, targetHRP, 0) -- touch begin
-                    task.wait(0.02)
-                    firetouchinterest(handle, targetHRP, 1) -- touch end
+                    -- Tenta invocar o evento (se for RemoteEvent/RemoteFunction)
+                    if knifeStabbed:IsA("RemoteEvent") then
+                        knifeStabbed:FireServer(targetHRP)
+                    elseif knifeStabbed:IsA("RemoteFunction") then
+                        knifeStabbed:InvokeServer(targetHRP)
+                    else
+                        -- Fallback: firetouchinterest
+                        local handle = knife:FindFirstChild("Handle")
+                        if handle then
+                            firetouchinterest(handle, targetHRP, 0)
+                            task.wait(0.02)
+                            firetouchinterest(handle, targetHRP, 1)
+                        end
+                    end
                     killedCount = killedCount + 1
                 end)
             end
@@ -788,7 +798,6 @@ local function killAll()
         task.wait(0.05) -- pequeno delay para não sobrecarregar
     end
 
-    -- Notificação
     OrionLib:MakeNotification({
         Name = "Tryharder Hub",
         Content = "💀 " .. killedCount .. " jogadores mortos!",
@@ -811,7 +820,7 @@ local function createKillButton()
     button.Name = "KillBtn"
     button.Parent = killScreenGuiRef
     button.Size = UDim2.new(0, killButtonSize, 0, killButtonSize)
-    button.Position = UDim2.new(0.2, -killButtonSize/2, 0.5, -killButtonSize/2) -- lado esquerdo
+    button.Position = UDim2.new(0.2, -killButtonSize/2, 0.5, -killButtonSize/2)
     button.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
     button.BackgroundTransparency = 0.3
     button.BorderSizePixel = 0
