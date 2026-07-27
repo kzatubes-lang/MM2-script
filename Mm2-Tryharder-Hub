@@ -1250,139 +1250,129 @@ PlayerTab:AddToggle({
     end
 })
 
--- ========== NOVA ABA: AUTO FARM ==========
+-- ========== AUTO FARM (APENAS TWEEN + NOCLIP) ==========
 local FarmTab = Window:MakeTab({Name = "Auto Farm", Icon = "rbxassetid://4483345998", PremiumOnly = false})
 
 -- ===== VARIÁVEIS =====
 local FarmRunning = false
 local TweenService = game:GetService("TweenService")
 
--- ===== FUNÇÃO DE DEBUG: LISTAR MOEDAS =====
-local function debugCoins()
-    print("🔍 Procurando moedas...")
-    local found = 0
-    local allParts = workspace:GetDescendants()
-    for _, obj in ipairs(allParts) do
-        if obj:IsA("BasePart") and obj.Name:lower():find("coin") then
-            found = found + 1
-            print("✅ Moeda encontrada:", obj.Name, "em", obj.Parent and obj.Parent.Name or "sem pai")
+-- ===== FUNÇÃO PARA ATIVAR NOCLIP =====
+local function enableNoclip()
+    if not Char then return end
+    for _, part in pairs(Char:GetChildren()) do
+        if part:IsA("BasePart") then
+            part.CanCollide = false
         end
     end
-    if found == 0 then
-        print("❌ Nenhuma moeda encontrada! Verifique o nome.")
-        -- Lista algumas partes para referência
-        local sample = {}
-        for _, obj in ipairs(allParts) do
-            if obj:IsA("BasePart") and #sample < 10 then
-                table.insert(sample, obj.Name)
-            end
+end
+
+-- ===== FUNÇÃO PARA DESATIVAR NOCLIP =====
+local function disableNoclip()
+    if not Char then return end
+    for _, part in pairs(Char:GetChildren()) do
+        if part:IsA("BasePart") then
+            part.CanCollide = true
         end
-        print("📋 Exemplos de partes no workspace:", table.concat(sample, ", "))
     end
-    OrionLib:MakeNotification({
-        Name = "Debug",
-        Content = found > 0 and "✅ " .. found .. " moedas encontradas!" or "❌ Nenhuma moeda!",
-        Image = "rbxassetid://7733658504",
-        Time = 3
-    })
 end
 
--- ===== FUNÇÃO PARA DEITAR O PERSONAGEM =====
-local function layDown()
-    if not Char or not Hum then return end
-    pcall(function()
-        for _, part in pairs(Char:GetChildren()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = false
-            end
-        end
-        Hum:ChangeState(Enum.HumanoidStateType.Ragdoll)
-        task.wait(0.2)
-        Hum:ChangeState(Enum.HumanoidStateType.Physics)
-        task.wait(0.1)
-        Hum:ChangeState(Enum.HumanoidStateType.Ragdoll)
-    end)
-end
-
--- ===== FUNÇÃO PARA MOVER O PERSONAGEM ATÉ UMA MOEDA =====
+-- ===== FUNÇÃO PARA MOVER O PERSONAGEM ATÉ UMA MOEDA (TWEEN) =====
 local function tweenToCoin(coin)
-    if not Char or not Root then return end
+    if not Char or not Root then return false end
+    
     local targetPos = coin.Position
     local currentPos = Root.Position
     local distance = (targetPos - currentPos).Magnitude
-    if distance > 200 then return end
-
+    
+    if distance > 200 then return false end -- ignora moedas muito longe
+    
+    -- Calcula o tempo do tween baseado na distância
+    local duration = math.min(distance / 25, 1.5)
+    
+    -- Cria o tween
     local tweenInfo = TweenInfo.new(
-        math.min(distance / 30, 1.5),
+        duration,
         Enum.EasingStyle.Sine,
         Enum.EasingDirection.Out
     )
-    local tween = TweenService:Create(Root, tweenInfo, {CFrame = CFrame.new(targetPos)})
+    
+    local tween = TweenService:Create(Root, tweenInfo, {
+        CFrame = CFrame.new(targetPos)
+    })
+    
+    -- Executa o tween
     tween:Play()
     tween.Completed:Wait()
+    
+    return true
 end
 
--- ===== FUNÇÃO PARA ENCONTRAR MOEDAS (MÚLTIPLOS MÉTODOS) =====
-local function getCoins()
+-- ===== FUNÇÃO PARA ENCONTRAR MOEDAS PRÓXIMAS =====
+local function getNearbyCoins()
     local coins = {}
+    if not Root then return coins end
     
-    -- Método 1: CoinContainer
-    local container = workspace:FindFirstChild("CoinContainer", true)
-    if container then
-        for _, obj in pairs(container:GetDescendants()) do
-            if obj:IsA("BasePart") and obj.Name:lower():find("coin") then
-                table.insert(coins, obj)
-            end
-        end
-    end
-    
-    -- Método 2: Busca global por partes com "coin" ou "money"
-    if #coins == 0 then
-        local allParts = workspace:GetDescendants()
-        for _, obj in ipairs(allParts) do
-            if obj:IsA("BasePart") then
-                local name = obj.Name:lower()
-                if name:find("coin") or name:find("money") or name:find("pickup") then
-                    table.insert(coins, obj)
+    -- Busca todas as partes com "coin" no nome
+    local allParts = workspace:GetDescendants()
+    for _, obj in ipairs(allParts) do
+        if obj:IsA("BasePart") then
+            local name = obj.Name:lower()
+            if name:find("coin") or name:find("money") then
+                local dist = (obj.Position - Root.Position).Magnitude
+                if dist < 200 then -- raio de busca
+                    table.insert(coins, {
+                        Part = obj,
+                        Distance = dist
+                    })
                 end
             end
         end
     end
     
-    -- Ordena por distância
-    if Root then
-        table.sort(coins, function(a, b)
-            return (a.Position - Root.Position).Magnitude < (b.Position - Root.Position).Magnitude
-        end)
+    -- Ordena por distância (mais próximo primeiro)
+    table.sort(coins, function(a, b)
+        return a.Distance < b.Distance
+    end)
+    
+    -- Retorna apenas as partes
+    local result = {}
+    for _, coin in ipairs(coins) do
+        table.insert(result, coin.Part)
     end
-    return coins
+    return result
 end
 
 -- ===== FUNÇÃO PRINCIPAL DO AUTO FARM =====
 local function startAutoFarm()
     if FarmRunning then return end
     FarmRunning = true
-    layDown()
-
+    
+    -- Ativa noclip
+    enableNoclip()
+    
     while FarmRunning do
-        local coins = getCoins()
+        -- Encontra moedas próximas
+        local coins = getNearbyCoins()
+        
         if #coins > 0 then
             for _, coin in ipairs(coins) do
                 if not FarmRunning then break end
                 if coin and coin.Parent then
                     tweenToCoin(coin)
-                    task.wait(0.2)
+                    task.wait(0.1) -- pequeno delay entre moedas
                 end
             end
         else
-            task.wait(2)
+            -- Se não houver moedas, espera um pouco
+            task.wait(1)
         end
     end
 end
 
--- ===== TOGGLE PARA ATIVAR/DESATIVAR AUTO FARM =====
+-- ===== TOGGLE PARA ATIVAR/DESATIVAR =====
 FarmTab:AddToggle({
-    Name = "Auto Farm (Moedas)",
+    Name = "Auto Farm (Tween)",
     Default = false,
     Callback = function(Value)
         if Value then
@@ -1396,16 +1386,7 @@ FarmTab:AddToggle({
             })
         else
             FarmRunning = false
-            if Hum then
-                pcall(function() Hum:ChangeState(Enum.HumanoidStateType.Running) end)
-            end
-            if Char then
-                for _, part in pairs(Char:GetChildren()) do
-                    if part:IsA("BasePart") then
-                        part.CanCollide = true
-                    end
-                end
-            end
+            disableNoclip()
             OrionLib:MakeNotification({
                 Name = "Auto Farm",
                 Content = "⏹️ Desativado!",
@@ -1418,20 +1399,29 @@ FarmTab:AddToggle({
 
 -- ===== BOTÃO DE DEBUG =====
 FarmTab:AddButton({
-    Name = "🔍 Debug: Listar Moedas",
-    Callback = debugCoins
-})
-
--- ===== NOTIFICAÇÃO DE INICIALIZAÇÃO =====
-FarmTab:AddButton({
-    Name = "Info: Como funciona",
+    Name = "🔍 Debug: Moedas próximas",
     Callback = function()
-        OrionLib:MakeNotification({
-            Name = "Auto Farm",
-            Content = "1. Deita o personagem\n2. Ativa noclip\n3. Coleta moedas\n4. Repete",
-            Image = "rbxassetid://7733658504",
-            Time = 5
-        })
+        local coins = getNearbyCoins()
+        if #coins > 0 then
+            OrionLib:MakeNotification({
+                Name = "Debug",
+                Content = "✅ " .. #coins .. " moedas próximas!",
+                Image = "rbxassetid://7733658504",
+                Time = 2
+            })
+            print("📋 Moedas encontradas:")
+            for i, coin in ipairs(coins) do
+                print(i .. ".", coin.Name, "em", coin.Position)
+            end
+        else
+            OrionLib:MakeNotification({
+                Name = "Debug",
+                Content = "❌ Nenhuma moeda próxima!",
+                Image = "rbxassetid://7733658504",
+                Time = 2
+            })
+            print("❌ Nenhuma moeda encontrada no raio de 200 studs.")
+        end
     end
 })
 
