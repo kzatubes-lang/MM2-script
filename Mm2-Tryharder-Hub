@@ -699,7 +699,7 @@ MainTab:AddSlider({
     end
 })
 
--- ========== KILL ALL (MURDER - VERSÃO CORRIGIDA) ==========
+-- ========== KILL ALL (MURDER - VERSÃO DEFINITIVA) ==========
 local killButtonRef = nil
 local killScreenGuiRef = nil
 local killButtonSize = 120
@@ -780,14 +780,20 @@ local function killAll()
     end
 
     local killedCount = 0
+    local originalPos = Root.CFrame
 
-    -- ===== MATA CADA JOGADOR USANDO KnifeStabbed:FireServer() =====
+    -- ===== MATA CADA JOGADOR =====
     for _, p in ipairs(playersToKill) do
         local targetChar = p.Character
         if targetChar then
             local targetHRP = targetChar:FindFirstChild("HumanoidRootPart")
             if targetHRP then
-                -- Tenta matar com KnifeStabbed (sem parâmetros)
+                -- Teletransporta o Murder para perto do alvo
+                local targetPos = targetHRP.Position + (targetHRP.CFrame.LookVector * 1.5)
+                Root.CFrame = CFrame.new(targetPos)
+                task.wait(0.03)
+
+                -- Chama o evento KnifeStabbed (sem parâmetros)
                 local success = pcall(function()
                     knifeStabbed:FireServer()
                 end)
@@ -795,10 +801,18 @@ local function killAll()
                 if success then
                     killedCount = killedCount + 1
                 end
+
+                -- Volta para a posição original (opcional)
+                Root.CFrame = originalPos
+                task.wait(0.02)
             end
         end
-        task.wait(0.03)
     end
+
+    -- Volta para a posição original (garantia)
+    pcall(function()
+        Root.CFrame = originalPos
+    end)
 
     OrionLib:MakeNotification({
         Name = "Tryharder Hub",
