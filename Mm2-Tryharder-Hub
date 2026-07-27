@@ -1249,6 +1249,159 @@ PlayerTab:AddToggle({
         end
     end
 })
+
+-- ========== NOVA ABA: AUTO FARM ==========
+local FarmTab = Window:MakeTab({Name = "Auto Farm", Icon = "rbxassetid://4483345998", PremiumOnly = false})
+
+-- ===== VARIÁVEIS =====
+local FarmRunning = false
+local FarmLoop = nil
+local TweenService = game:GetService("TweenService")
+
+-- ===== FUNÇÃO PARA DEITAR O PERSONAGEM =====
+local function layDown()
+    if not Char or not Hum then return end
+    -- Tenta colocar o personagem deitado
+    pcall(function()
+        Hum:ChangeState(Enum.HumanoidStateType.Ragdoll)
+        task.wait(0.2)
+        Hum:ChangeState(Enum.HumanoidStateType.Physics)
+        task.wait(0.1)
+        Hum:ChangeState(Enum.HumanoidStateType.GettingUp) -- Força a ficar deitado
+        Hum:ChangeState(Enum.HumanoidStateType.Ragdoll)
+    end)
+end
+
+-- ===== FUNÇÃO PARA MOVER O PERSONAGEM ATÉ UMA MOEDA =====
+local function tweenToCoin(coin)
+    if not Char or not Root then return end
+    local targetPos = coin.Position
+    local currentPos = Root.Position
+    local distance = (targetPos - currentPos).Magnitude
+    if distance > 50 then return end -- ignora moedas muito longe
+
+    local tweenInfo = TweenInfo.new(
+        math.min(distance / 40, 2), -- tempo baseado na distância
+        Enum.EasingStyle.Sine,
+        Enum.EasingDirection.Out
+    )
+    local tween = TweenService:Create(Root, tweenInfo, {CFrame = CFrame.new(targetPos)})
+    tween:Play()
+    tween.Completed:Wait()
+end
+
+-- ===== FUNÇÃO PARA ENCONTRAR MOEDAS PRÓXIMAS =====
+local function getNearbyCoins()
+    local coins = {}
+    local allCoins = workspace:GetDescendants()
+    for _, obj in ipairs(allCoins) do
+        if obj:IsA("BasePart") and obj.Name:lower():find("coin") or obj.Name:lower():find("money") then
+            if Root then
+                local dist = (obj.Position - Root.Position).Magnitude
+                if dist < 150 then -- raio de busca
+                    table.insert(coins, obj)
+                end
+            end
+        end
+    end
+    -- Ordena por distância (mais próximo primeiro)
+    table.sort(coins, function(a, b)
+        return (a.Position - Root.Position).Magnitude < (b.Position - Root.Position).Magnitude
+    end)
+    return coins
+end
+
+-- ===== FUNÇÃO PRINCIPAL DO AUTO FARM =====
+local function startAutoFarm()
+    if FarmRunning then return end
+    FarmRunning = true
+
+    -- Deita o personagem
+    layDown()
+
+    while FarmRunning do
+        -- 1. COLETA MOEDAS
+        local coins = getNearbyCoins()
+        if #coins > 0 then
+            for _, coin in ipairs(coins) do
+                if not FarmRunning then break end
+                if coin and coin.Parent then
+                    tweenToCoin(coin)
+                    task.wait(0.3)
+                end
+            end
+        else
+            -- Se não houver moedas, espera um pouco
+            task.wait(1)
+        end
+
+        -- 2. IDENTIFICA O MURDER
+        local murderer = nil
+        local roles = getRoles()
+        for plrName, role in pairs(roles) do
+            if role == "Murderer" then
+                murderer = Players:FindFirstChild(plrName)
+                break
+            end
+        end
+
+        -- 3. MATA O MURDER (FLING)
+        if murderer and murderer ~= LocalPlayer then
+            SHubFling(murderer)
+            -- Aguarda o Murder morrer e a partida reiniciar
+            task.wait(3)
+            -- Atualiza as variáveis do personagem após renascer
+            Char = LocalPlayer.Character
+            Hum = Char and Char:FindFirstChildWhichIsA("Humanoid")
+            Root = (Hum and Hum.RootPart) or Char and (Char:FindFirstChild("HumanoidRootPart") or Char:FindFirstChild("Torso") or Char:FindFirstChild("UpperTorso"))
+            -- Deita novamente após renascer
+            layDown()
+        else
+            -- Se não encontrar Murder, espera um pouco
+            task.wait(2)
+        end
+    end
+end
+
+-- ===== TOGGLE PARA ATIVAR/DESATIVAR AUTO FARM =====
+FarmTab:AddToggle({
+    Name = "Auto Farm (Moedas + Fling Murder)",
+    Default = false,
+    Callback = function(Value)
+        if Value then
+            FarmRunning = true
+            -- Inicia o loop em uma thread separada
+            task.spawn(startAutoFarm)
+        else
+            FarmRunning = false
+            -- Para o loop
+            if FarmLoop then
+                FarmLoop = false
+                FarmLoop = nil
+            end
+            -- Levanta o personagem (desfaz o ragdoll)
+            if Hum then
+                pcall(function()
+                    Hum:ChangeState(Enum.HumanoidStateType.Running)
+                end)
+            end
+        end
+    end
+})
+
+-- ===== NOTIFICAÇÃO DE INICIALIZAÇÃO DA ABA =====
+FarmTab:AddButton({
+    Name = "Info: Como funciona",
+    Callback = function()
+        OrionLib:MakeNotification({
+            Name = "Auto Farm",
+            Content = "1. Deita o personagem\n2. Coleta moedas próximas\n3. Fling no Murder\n4. Repete",
+            Image = "rbxassetid://7733658504",
+            Time = 5
+        })
+    end
+})
+
 -- ========== NOTIFICAÇÃO DE INICIALIZAÇÃO ==========
 OrionLib:MakeNotification({
     Name = "Tryharder Hub",
