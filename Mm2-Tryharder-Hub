@@ -1261,13 +1261,18 @@ local TweenService = game:GetService("TweenService")
 -- ===== FUNÇÃO PARA DEITAR O PERSONAGEM =====
 local function layDown()
     if not Char or not Hum then return end
-    -- Tenta colocar o personagem deitado
     pcall(function()
+        -- Desativa a colisão (noclip)
+        for _, part in pairs(Char:GetChildren()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = false
+            end
+        end
+        -- Deita o personagem
         Hum:ChangeState(Enum.HumanoidStateType.Ragdoll)
         task.wait(0.2)
         Hum:ChangeState(Enum.HumanoidStateType.Physics)
         task.wait(0.1)
-        Hum:ChangeState(Enum.HumanoidStateType.GettingUp) -- Força a ficar deitado
         Hum:ChangeState(Enum.HumanoidStateType.Ragdoll)
     end)
 end
@@ -1278,10 +1283,10 @@ local function tweenToCoin(coin)
     local targetPos = coin.Position
     local currentPos = Root.Position
     local distance = (targetPos - currentPos).Magnitude
-    if distance > 50 then return end -- ignora moedas muito longe
+    if distance > 200 then return end -- ignora moedas muito longe
 
     local tweenInfo = TweenInfo.new(
-        math.min(distance / 40, 2), -- tempo baseado na distância
+        math.min(distance / 30, 1.5), -- tempo baseado na distância
         Enum.EasingStyle.Sine,
         Enum.EasingDirection.Out
     )
@@ -1290,24 +1295,25 @@ local function tweenToCoin(coin)
     tween.Completed:Wait()
 end
 
--- ===== FUNÇÃO PARA ENCONTRAR MOEDAS PRÓXIMAS =====
-local function getNearbyCoins()
+-- ===== FUNÇÃO PARA ENCONTRAR MOEDAS (USANDO COINCONTAINER) =====
+local function getCoins()
     local coins = {}
-    local allCoins = workspace:GetDescendants()
-    for _, obj in ipairs(allCoins) do
-        if obj:IsA("BasePart") and obj.Name:lower():find("coin") or obj.Name:lower():find("money") then
-            if Root then
-                local dist = (obj.Position - Root.Position).Magnitude
-                if dist < 150 then -- raio de busca
-                    table.insert(coins, obj)
-                end
-            end
+    local container = workspace:FindFirstChild("CoinContainer", true)
+    if not container then return coins end
+
+    -- Procura todas as partes dentro do CoinContainer
+    for _, obj in pairs(container:GetDescendants()) do
+        if obj:IsA("BasePart") and obj.Name:lower():find("coin") then
+            table.insert(coins, obj)
         end
     end
+
     -- Ordena por distância (mais próximo primeiro)
-    table.sort(coins, function(a, b)
-        return (a.Position - Root.Position).Magnitude < (b.Position - Root.Position).Magnitude
-    end)
+    if Root then
+        table.sort(coins, function(a, b)
+            return (a.Position - Root.Position).Magnitude < (b.Position - Root.Position).Magnitude
+        end)
+    end
     return coins
 end
 
@@ -1316,48 +1322,22 @@ local function startAutoFarm()
     if FarmRunning then return end
     FarmRunning = true
 
-    -- Deita o personagem
+    -- Deita o personagem e ativa noclip
     layDown()
 
     while FarmRunning do
         -- 1. COLETA MOEDAS
-        local coins = getNearbyCoins()
+        local coins = getCoins()
         if #coins > 0 then
             for _, coin in ipairs(coins) do
                 if not FarmRunning then break end
                 if coin and coin.Parent then
                     tweenToCoin(coin)
-                    task.wait(0.3)
+                    task.wait(0.2)
                 end
             end
         else
             -- Se não houver moedas, espera um pouco
-            task.wait(1)
-        end
-
-        -- 2. IDENTIFICA O MURDER
-        local murderer = nil
-        local roles = getRoles()
-        for plrName, role in pairs(roles) do
-            if role == "Murderer" then
-                murderer = Players:FindFirstChild(plrName)
-                break
-            end
-        end
-
-        -- 3. MATA O MURDER (FLING)
-        if murderer and murderer ~= LocalPlayer then
-            SHubFling(murderer)
-            -- Aguarda o Murder morrer e a partida reiniciar
-            task.wait(3)
-            -- Atualiza as variáveis do personagem após renascer
-            Char = LocalPlayer.Character
-            Hum = Char and Char:FindFirstChildWhichIsA("Humanoid")
-            Root = (Hum and Hum.RootPart) or Char and (Char:FindFirstChild("HumanoidRootPart") or Char:FindFirstChild("Torso") or Char:FindFirstChild("UpperTorso"))
-            -- Deita novamente após renascer
-            layDown()
-        else
-            -- Se não encontrar Murder, espera um pouco
             task.wait(2)
         end
     end
@@ -1365,26 +1345,39 @@ end
 
 -- ===== TOGGLE PARA ATIVAR/DESATIVAR AUTO FARM =====
 FarmTab:AddToggle({
-    Name = "Auto Farm (Moedas + Fling Murder)",
+    Name = "Auto Farm (Moedas)",
     Default = false,
     Callback = function(Value)
         if Value then
             FarmRunning = true
-            -- Inicia o loop em uma thread separada
             task.spawn(startAutoFarm)
+            OrionLib:MakeNotification({
+                Name = "Auto Farm",
+                Content = "✅ Ativado! Coletando moedas...",
+                Image = "rbxassetid://7733658504",
+                Time = 2
+            })
         else
             FarmRunning = false
-            -- Para o loop
-            if FarmLoop then
-                FarmLoop = false
-                FarmLoop = nil
-            end
-            -- Levanta o personagem (desfaz o ragdoll)
+            -- Levanta o personagem e remove noclip
             if Hum then
                 pcall(function()
                     Hum:ChangeState(Enum.HumanoidStateType.Running)
                 end)
             end
+            if Char then
+                for _, part in pairs(Char:GetChildren()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = true
+                    end
+                end
+            end
+            OrionLib:MakeNotification({
+                Name = "Auto Farm",
+                Content = "⏹️ Desativado!",
+                Image = "rbxassetid://7733658504",
+                Time = 2
+            })
         end
     end
 })
@@ -1395,7 +1388,7 @@ FarmTab:AddButton({
     Callback = function()
         OrionLib:MakeNotification({
             Name = "Auto Farm",
-            Content = "1. Deita o personagem\n2. Coleta moedas próximas\n3. Fling no Murder\n4. Repete",
+            Content = "1. Deita o personagem\n2. Ativa noclip\n3. Coleta moedas do CoinContainer\n4. Repete infinitamente",
             Image = "rbxassetid://7733658504",
             Time = 5
         })
