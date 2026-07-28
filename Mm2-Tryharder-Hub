@@ -1250,12 +1250,11 @@ PlayerTab:AddToggle({
     end
 })
 
--- ========== AUTO FARM (APENAS TWEEN + NOCLIP) ==========
+-- ========== AUTO FARM (CFRAME DIRETO) ==========
 local FarmTab = Window:MakeTab({Name = "Auto Farm", Icon = "rbxassetid://4483345998", PremiumOnly = false})
 
 -- ===== VARIÁVEIS =====
 local FarmRunning = false
-local TweenService = game:GetService("TweenService")
 
 -- ===== FUNÇÃO PARA ATIVAR NOCLIP =====
 local function enableNoclip()
@@ -1277,34 +1276,15 @@ local function disableNoclip()
     end
 end
 
--- ===== FUNÇÃO PARA MOVER O PERSONAGEM ATÉ UMA MOEDA (TWEEN) =====
-local function tweenToCoin(coin)
+-- ===== FUNÇÃO PARA MOVER O PERSONAGEM ATÉ UMA MOEDA (CFRAME DIRETO) =====
+local function moveToCoin(coin)
     if not Char or not Root then return false end
-    
     local targetPos = coin.Position
-    local currentPos = Root.Position
-    local distance = (targetPos - currentPos).Magnitude
-    
+    local distance = (targetPos - Root.Position).Magnitude
     if distance > 200 then return false end -- ignora moedas muito longe
     
-    -- Calcula o tempo do tween baseado na distância
-    local duration = math.min(distance / 25, 1.5)
-    
-    -- Cria o tween
-    local tweenInfo = TweenInfo.new(
-        duration,
-        Enum.EasingStyle.Sine,
-        Enum.EasingDirection.Out
-    )
-    
-    local tween = TweenService:Create(Root, tweenInfo, {
-        CFrame = CFrame.new(targetPos)
-    })
-    
-    -- Executa o tween
-    tween:Play()
-    tween.Completed:Wait()
-    
+    -- Move diretamente (sem animação)
+    Root.CFrame = CFrame.new(targetPos)
     return true
 end
 
@@ -1320,7 +1300,7 @@ local function getNearbyCoins()
             local name = obj.Name:lower()
             if name:find("coin") or name:find("money") then
                 local dist = (obj.Position - Root.Position).Magnitude
-                if dist < 200 then -- raio de busca
+                if dist < 200 then
                     table.insert(coins, {
                         Part = obj,
                         Distance = dist
@@ -1335,7 +1315,6 @@ local function getNearbyCoins()
         return a.Distance < b.Distance
     end)
     
-    -- Retorna apenas as partes
     local result = {}
     for _, coin in ipairs(coins) do
         table.insert(result, coin.Part)
@@ -1348,23 +1327,20 @@ local function startAutoFarm()
     if FarmRunning then return end
     FarmRunning = true
     
-    -- Ativa noclip
     enableNoclip()
     
     while FarmRunning do
-        -- Encontra moedas próximas
         local coins = getNearbyCoins()
         
         if #coins > 0 then
             for _, coin in ipairs(coins) do
                 if not FarmRunning then break end
                 if coin and coin.Parent then
-                    tweenToCoin(coin)
-                    task.wait(0.1) -- pequeno delay entre moedas
+                    moveToCoin(coin)
+                    task.wait(0.15) -- delay entre moedas
                 end
             end
         else
-            -- Se não houver moedas, espera um pouco
             task.wait(1)
         end
     end
@@ -1372,7 +1348,7 @@ end
 
 -- ===== TOGGLE PARA ATIVAR/DESATIVAR =====
 FarmTab:AddToggle({
-    Name = "Auto Farm (Tween)",
+    Name = "Auto Farm (CFrame)",
     Default = false,
     Callback = function(Value)
         if Value then
