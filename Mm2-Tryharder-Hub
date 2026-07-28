@@ -1250,24 +1250,25 @@ PlayerTab:AddToggle({
     end
 })
 
--- ========== AUTO FARM (COM ATUALIZAÇÃO AUTOMÁTICA) ==========
+-- ========== AUTO FARM (COM AJUSTES ANTI-CHEAT) ==========
 local FarmTab = Window:MakeTab({Name = "Auto Farm", Icon = "rbxassetid://4483345998", PremiumOnly = false})
 
 -- ===== VARIÁVEIS =====
 local FarmRunning = false
 local TweenService = game:GetService("TweenService")
-local speed = 50 -- velocidade padrão (0-100)
+local speed = 10 -- velocidade padrão (bem lenta)
 local parts = {}
 local index = 1
 local tweening = false
 local lastCollectTime = 0
+local waitingForCoins = false
 
--- ===== FUNÇÃO PARA COLETAR MOEDAS (ATUALIZA SEMPRE) =====
+-- ===== FUNÇÃO PARA COLETAR MOEDAS =====
 local function CollectCoins()
     parts = {}
     local folder = workspace:FindFirstChild("CoinContainer", true)
     if not folder then
-        -- Se não encontrar, tenta buscar qualquer parte com "coin" no workspace
+        -- Fallback: busca qualquer parte com "coin" no workspace
         local allParts = workspace:GetDescendants()
         for _, part in pairs(allParts) do
             if part:IsA("BasePart") and part.Name:lower():find("coin") then
@@ -1296,7 +1297,7 @@ local function CollectCoins()
     end
 end
 
--- ===== FUNÇÃO PARA TWEEN ATÉ UMA MOEDA =====
+-- ===== FUNÇÃO PARA TWEEN ATÉ UMA MOEDA (VELOCIDADE BEM LENTA) =====
 local function TweenToCoin(part)
     if tweening or not part or not part.Parent then return end
     
@@ -1304,16 +1305,15 @@ local function TweenToCoin(part)
     local root = char and char:FindFirstChild("HumanoidRootPart")
     if not root then return end
     
-    -- Calcula a distância
     local targetPos = part.Position
     local distance = (root.Position - targetPos).Magnitude
-    if distance > 500 then return end -- ignora moedas muito longe
+    if distance > 150 then return end -- ignora moedas muito longe (>150 studs)
     
     tweening = true
     
-    -- Velocidade ajustada (0-100 -> 20-800)
-    local actualSpeed = 20 + (speed / 100) * 780
-    local duration = math.max(distance / actualSpeed, 0.05)
+    -- Velocidade ajustada: 0-50 -> 5-150 studs/segundo (bem lento)
+    local actualSpeed = 5 + (speed / 50) * 145
+    local duration = math.max(distance / actualSpeed, 0.1)
     
     -- Ativa noclip temporário
     local noclip = {}
@@ -1343,33 +1343,35 @@ local function TweenToCoin(part)
     tweening = false
 end
 
--- ===== FUNÇÃO PRINCIPAL DO LOOP (COM ATUALIZAÇÃO CONSTANTE) =====
+-- ===== FUNÇÃO PRINCIPAL DO LOOP =====
 local function farmLoop()
     local lastCollectTime = 0
+    local idleTime = 0
     
     while FarmRunning do
         -- Atualiza a lista de moedas a cada 2 segundos
         if tick() - lastCollectTime > 2 then
             CollectCoins()
             lastCollectTime = tick()
-            if #parts > 0 then
-                -- Mostra quantas moedas foram encontradas (apenas uma vez)
-            end
         end
         
-        -- Se não houver moedas, espera um pouco
+        -- Se não houver moedas, fica parado esperando (sem voar)
         if #parts == 0 then
-            task.wait(1)
-            -- Tenta forçar uma coleta imediata
-            CollectCoins()
+            if not waitingForCoins then
+                waitingForCoins = true
+                print("⏳ Aguardando moedas spawnarem...")
+            end
+            task.wait(1) -- espera 1 segundo e tenta de novo
+            CollectCoins() -- tenta recarregar
             if #parts > 0 then
+                waitingForCoins = false
                 index = 1
+                print("✅ Moedas encontradas! Coletando...")
             end
             task.wait(0.5)
-        end
-        
-        -- Pega a moeda mais próxima (já está ordenada)
-        if #parts > 0 then
+        else
+            waitingForCoins = false
+            -- Pega a moeda mais próxima
             local target = parts[index]
             if target and target.Parent then
                 TweenToCoin(target)
@@ -1401,12 +1403,12 @@ FarmTab:AddToggle({
     Callback = function(Value)
         if Value then
             FarmRunning = true
-            -- Coleta inicial
+            waitingForCoins = false
             CollectCoins()
             if #parts == 0 then
                 OrionLib:MakeNotification({
                     Name = "Auto Farm",
-                    Content = "⏳ Aguardando moedas aparecerem...",
+                    Content = "⏳ Aguardando moedas...",
                     Image = "rbxassetid://7733658504",
                     Time = 2
                 })
@@ -1423,6 +1425,7 @@ FarmTab:AddToggle({
         else
             FarmRunning = false
             tweening = false
+            waitingForCoins = false
             OrionLib:MakeNotification({
                 Name = "Auto Farm",
                 Content = "⏹️ Desativado!",
@@ -1433,14 +1436,14 @@ FarmTab:AddToggle({
     end
 })
 
--- ===== SLIDER PARA VELOCIDADE (0 A 100) =====
+-- ===== SLIDER PARA VELOCIDADE (0 A 50) =====
 FarmTab:AddSlider({
     Name = "Velocidade do Tween",
     Min = 0,
-    Max = 100,
-    Default = 50,
+    Max = 50,
+    Default = 10,
     Color = Color3.fromRGB(255, 255, 255),
-    Increment = 5,
+    Increment = 1,
     ValueName = "%",
     Callback = function(Value)
         speed = Value
@@ -1460,9 +1463,13 @@ FarmTab:AddButton({
                 Time = 2
             })
             print("📋 Moedas encontradas:")
+            local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
             for i, coin in ipairs(parts) do
-                local dist = (coin.Position - (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character.HumanoidRootPart.Position or Vector3.new(0,0,0))).Magnitude
-                print(i .. ".", coin.Name, "| Distância:", math.round(dist), "studs")
+                local dist = "N/A"
+                if root then
+                    dist = math.round((coin.Position - root.Position).Magnitude)
+                end
+                print(i .. ".", coin.Name, "| Distância:", dist, "studs")
             end
         else
             OrionLib:MakeNotification({
