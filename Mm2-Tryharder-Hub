@@ -1250,44 +1250,48 @@ PlayerTab:AddToggle({
     end
 })
 
--- ========== AUTO FARM (COM AJUSTES ANTI-CHEAT) ==========
+-- ========== AUTO FARM (VERSÃO FINAL - OTIMIZADO) ==========
 local FarmTab = Window:MakeTab({Name = "Auto Farm", Icon = "rbxassetid://4483345998", PremiumOnly = false})
 
 -- ===== VARIÁVEIS =====
 local FarmRunning = false
 local TweenService = game:GetService("TweenService")
-local speed = 10 -- velocidade padrão (bem lenta)
 local parts = {}
-local index = 1
 local tweening = false
-local lastCollectTime = 0
-local waitingForCoins = false
 
--- ===== FUNÇÃO PARA COLETAR MOEDAS =====
+-- Velocidade fixa (em studs por segundo) - valor seguro para anti-cheat
+local FIXED_SPEED = 35
+
+-- ===== FUNÇÃO PARA COLETAR MOEDAS (SEMPRE ORDENADA POR DISTÂNCIA) =====
 local function CollectCoins()
     parts = {}
+    local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+    
     local folder = workspace:FindFirstChild("CoinContainer", true)
     if not folder then
         -- Fallback: busca qualquer parte com "coin" no workspace
         local allParts = workspace:GetDescendants()
         for _, part in pairs(allParts) do
             if part:IsA("BasePart") and part.Name:lower():find("coin") then
-                table.insert(parts, part)
+                local dist = (part.Position - root.Position).Magnitude
+                if dist < 150 then -- só coleta moedas próximas (até 150 studs)
+                    table.insert(parts, part)
+                end
             end
-        end
-        if #parts == 0 then
-            return
         end
     else
         for _, part in pairs(folder:GetDescendants()) do
             if part:IsA("BasePart") and part.Name:lower():find("coin") then
-                table.insert(parts, part)
+                local dist = (part.Position - root.Position).Magnitude
+                if dist < 150 then
+                    table.insert(parts, part)
+                end
             end
         end
     end
     
     -- Ordena por distância (mais próximo primeiro)
-    local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
     if root then
         table.sort(parts, function(a, b)
             local distA = (a.Position - root.Position).Magnitude
@@ -1297,23 +1301,35 @@ local function CollectCoins()
     end
 end
 
--- ===== FUNÇÃO PARA TWEEN ATÉ UMA MOEDA (VELOCIDADE BEM LENTA) =====
-local function TweenToCoin(part)
-    if tweening or not part or not part.Parent then return end
+-- ===== FUNÇÃO PARA TWEEN ATÉ A MOEDA MAIS PRÓXIMA =====
+local function TweenToNearestCoin()
+    if tweening then return end
+    if #parts == 0 then return end
     
     local char = LocalPlayer.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
     if not root then return end
     
-    local targetPos = part.Position
+    -- A moeda mais próxima é a primeira da lista (já ordenada)
+    local target = parts[1]
+    if not target or not target.Parent then
+        table.remove(parts, 1)
+        return
+    end
+    
+    local targetPos = target.Position
     local distance = (root.Position - targetPos).Magnitude
-    if distance > 150 then return end -- ignora moedas muito longe (>150 studs)
+    
+    -- Se a moeda sumiu ou está muito longe, remove da lista
+    if distance > 200 then
+        table.remove(parts, 1)
+        return
+    end
     
     tweening = true
     
-    -- Velocidade ajustada: 0-50 -> 5-150 studs/segundo (bem lento)
-    local actualSpeed = 5 + (speed / 50) * 145
-    local duration = math.max(distance / actualSpeed, 0.1)
+    -- Tempo baseado na distância e velocidade fixa
+    local duration = math.max(distance / FIXED_SPEED, 0.1)
     
     -- Ativa noclip temporário
     local noclip = {}
@@ -1324,7 +1340,7 @@ local function TweenToCoin(part)
         end
     end
     
-    -- Executa o tween
+    -- Executa o tween (vai um pouco acima da moeda para evitar colisão)
     local tween = TweenService:Create(root,
         TweenInfo.new(duration, Enum.EasingStyle.Linear),
         {CFrame = CFrame.new(targetPos + Vector3.new(0, 2, 0))}
@@ -1340,59 +1356,28 @@ local function TweenToCoin(part)
         end
     end
     
+    -- Remove a moeda coletada
+    table.remove(parts, 1)
+    
     tweening = false
 end
 
 -- ===== FUNÇÃO PRINCIPAL DO LOOP =====
 local function farmLoop()
-    local lastCollectTime = 0
-    local idleTime = 0
-    
     while FarmRunning do
-        -- Atualiza a lista de moedas a cada 2 segundos
-        if tick() - lastCollectTime > 2 then
-            CollectCoins()
-            lastCollectTime = tick()
-        end
+        -- Atualiza a lista de moedas (sempre buscando as mais próximas)
+        CollectCoins()
         
-        -- Se não houver moedas, fica parado esperando (sem voar)
-        if #parts == 0 then
-            if not waitingForCoins then
-                waitingForCoins = true
-                print("⏳ Aguardando moedas spawnarem...")
-            end
-            task.wait(1) -- espera 1 segundo e tenta de novo
-            CollectCoins() -- tenta recarregar
-            if #parts > 0 then
-                waitingForCoins = false
-                index = 1
-                print("✅ Moedas encontradas! Coletando...")
-            end
-            task.wait(0.5)
+        if #parts > 0 then
+            -- Vai para a moeda mais próxima
+            TweenToNearestCoin()
         else
-            waitingForCoins = false
-            -- Pega a moeda mais próxima
-            local target = parts[index]
-            if target and target.Parent then
-                TweenToCoin(target)
-            end
-            
-            -- Remove a moeda já coletada (se ela sumir do jogo)
-            if target and not target.Parent then
-                table.remove(parts, index)
-            else
-                index = index + 1
-            end
-            
-            -- Se chegou ao fim da lista, recomeça
-            if index > #parts or #parts == 0 then
-                index = 1
-                CollectCoins() -- recarrega as moedas
-                task.wait(0.3)
-            end
+            -- Se não houver moedas, fica parado esperando
+            if not FarmRunning then break end
+            task.wait(1) -- espera 1 segundo antes de tentar de novo
         end
         
-        task.wait(0.1)
+        task.wait(0.05) -- delay curto para não sobrecarregar
     end
 end
 
@@ -1403,29 +1388,28 @@ FarmTab:AddToggle({
     Callback = function(Value)
         if Value then
             FarmRunning = true
-            waitingForCoins = false
+            tweening = false
             CollectCoins()
-            if #parts == 0 then
+            if #parts > 0 then
                 OrionLib:MakeNotification({
                     Name = "Auto Farm",
-                    Content = "⏳ Aguardando moedas...",
+                    Content = "✅ " .. #parts .. " moedas próximas!",
                     Image = "rbxassetid://7733658504",
                     Time = 2
                 })
             else
                 OrionLib:MakeNotification({
                     Name = "Auto Farm",
-                    Content = "✅ " .. #parts .. " moedas encontradas!",
+                    Content = "⏳ Aguardando moedas...",
                     Image = "rbxassetid://7733658504",
                     Time = 2
                 })
             end
-            index = 1
             task.spawn(farmLoop)
         else
             FarmRunning = false
             tweening = false
-            waitingForCoins = false
+            parts = {}
             OrionLib:MakeNotification({
                 Name = "Auto Farm",
                 Content = "⏹️ Desativado!",
@@ -1436,33 +1420,19 @@ FarmTab:AddToggle({
     end
 })
 
--- ===== SLIDER PARA VELOCIDADE (0 A 50) =====
-FarmTab:AddSlider({
-    Name = "Velocidade do Tween",
-    Min = 0,
-    Max = 50,
-    Default = 10,
-    Color = Color3.fromRGB(255, 255, 255),
-    Increment = 1,
-    ValueName = "%",
-    Callback = function(Value)
-        speed = Value
-    end
-})
-
 -- ===== BOTÃO DE DEBUG =====
 FarmTab:AddButton({
-    Name = "🔍 Debug: Ver moedas",
+    Name = "🔍 Debug: Moedas próximas",
     Callback = function()
         CollectCoins()
         if #parts > 0 then
             OrionLib:MakeNotification({
                 Name = "Debug",
-                Content = "✅ " .. #parts .. " moedas encontradas!",
+                Content = "✅ " .. #parts .. " moedas próximas!",
                 Image = "rbxassetid://7733658504",
                 Time = 2
             })
-            print("📋 Moedas encontradas:")
+            print("📋 Moedas encontradas (ordenadas por distância):")
             local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
             for i, coin in ipairs(parts) do
                 local dist = "N/A"
@@ -1474,11 +1444,11 @@ FarmTab:AddButton({
         else
             OrionLib:MakeNotification({
                 Name = "Debug",
-                Content = "❌ Nenhuma moeda encontrada!",
+                Content = "❌ Nenhuma moeda próxima!",
                 Image = "rbxassetid://7733658504",
                 Time = 2
             })
-            print("❌ Nenhuma moeda encontrada. Verifique se o CoinContainer existe.")
+            print("❌ Nenhuma moeda a menos de 150 studs.")
         end
     end
 })
