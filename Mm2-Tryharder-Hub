@@ -911,6 +911,133 @@ MainTab:AddSlider({
     end
 })
 
+-- ========== BALAS ATRAVESSAM PAREDES (TOGGLE) ==========
+MainTab:AddToggle({
+    Name = "Balas Atravessam Paredes",
+    Default = false,
+    Callback = function(Value)
+        env.WallbangEnabled = Value
+
+        if Value then
+            OrionLib:MakeNotification({
+                Name = "Tryharder Hub",
+                Content = "✅ Balas atravessam paredes!",
+                Image = "rbxassetid://7733658504",
+                Time = 2
+            })
+        else
+            OrionLib:MakeNotification({
+                Name = "Tryharder Hub",
+                Content = "⏹️ Wallbang desativado.",
+                Image = "rbxassetid://7733658504",
+                Time = 2
+            })
+        end
+
+        -- ===== FUNÇÃO PARA MODIFICAR O TIRO (WALLBANG) =====
+        -- Hook no remote "Shoot" para modificar o alvo
+        if Value then
+            -- Desconecta o hook anterior se existir
+            if env.WallbangConnection then
+                env.WallbangConnection:Disconnect()
+                env.WallbangConnection = nil
+            end
+
+            -- Cria um novo hook
+            local function wallbangHook(originCF, targetCF)
+                -- Obtém a posição do assassino (se existir)
+                local targetPos = nil
+                local roles = getRoles()
+                for plrName, role in pairs(roles) do
+                    if role == "Murderer" then
+                        local player = Players:FindFirstChild(plrName)
+                        if player and player ~= LocalPlayer and player.Character then
+                            local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+                            if hrp then
+                                targetPos = hrp.Position
+                            else
+                                local torso = player.Character:FindFirstChild("Torso") or player.Character:FindFirstChild("UpperTorso")
+                                if torso then targetPos = torso.Position end
+                            end
+                            break
+                        end
+                    end
+                end
+
+                -- Se encontrou o assassino, modifica o alvo para um ponto atrás dele
+                if targetPos then
+                    -- Cria um CFrame apontando para o assassino, mas com o alvo estendido 50 studs para trás
+                    local direction = (targetPos - originCF.Position).Unit
+                    local newTargetPos = targetPos + direction * 50 -- estende o alvo para trás do assassino
+                    local newTargetCF = CFrame.new(newTargetPos)
+                    return originCF, newTargetCF
+                end
+
+                -- Se não encontrou o assassino, mantém o alvo original
+                return originCF, targetCF
+            end
+
+            -- Hook no remote "Shoot" (substitui o FireServer)
+            local originalShoot = nil
+            local function hookShoot(remote, ...)
+                local args = {...}
+                if #args >= 2 then
+                    local originCF = args[1]
+                    local targetCF = args[2]
+                    -- Modifica o alvo
+                    local newOrigin, newTarget = wallbangHook(originCF, targetCF)
+                    -- Chama o FireServer com os novos parâmetros
+                    originalShoot(remote, newOrigin, newTarget)
+                else
+                    -- Se não tiver os parâmetros esperados, chama original
+                    originalShoot(remote, ...)
+                end
+            end
+
+            -- Substitui o FireServer do remote "Shoot" em todas as armas
+            env.WallbangConnection = game:GetService("RunService").Heartbeat:Connect(function()
+                local char = LocalPlayer.Character
+                if char then
+                    local gun = char:FindFirstChild("Gun")
+                    if gun then
+                        local shootRemote = gun:FindFirstChild("Shoot")
+                        if shootRemote and shootRemote:IsA("RemoteEvent") then
+                            -- Se ainda não foi hookado
+                            if not env._wallbangHooked then
+                                env._wallbangHooked = true
+                                originalShoot = shootRemote.FireServer
+                                shootRemote.FireServer = function(self, ...)
+                                    hookShoot(self, ...)
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+        else
+            -- Desativa o hook
+            if env.WallbangConnection then
+                env.WallbangConnection:Disconnect()
+                env.WallbangConnection = nil
+            end
+            -- Restaura o FireServer original
+            if env._wallbangHooked then
+                env._wallbangHooked = false
+                local char = LocalPlayer.Character
+                if char then
+                    local gun = char:FindFirstChild("Gun")
+                    if gun then
+                        local shootRemote = gun:FindFirstChild("Shoot")
+                        if shootRemote and shootRemote:IsA("RemoteEvent") and originalShoot then
+                            shootRemote.FireServer = originalShoot
+                        end
+                    end
+                end
+            end
+        end
+    end
+})
+
 -- ========== FLING MURDERER (CORRIGIDO) ==========
 TrollTab:AddButton({
 	Name = "Fling Murderer",
