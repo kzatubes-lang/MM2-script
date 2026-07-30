@@ -911,7 +911,7 @@ MainTab:AddSlider({
     end
 })
 
--- ========== BALAS ATRAVESSAM PAREDES (TOGGLE) ==========
+-- ========== BALAS ATRAVESSAM PAREDES (VERSÃO SIMPLES) ==========
 MainTab:AddToggle({
     Name = "Balas Atravessam Paredes",
     Default = false,
@@ -921,7 +921,7 @@ MainTab:AddToggle({
         if Value then
             OrionLib:MakeNotification({
                 Name = "Tryharder Hub",
-                Content = "✅ Balas atravessam paredes!",
+                Content = "✅ Wallbang ativado!",
                 Image = "rbxassetid://7733658504",
                 Time = 2
             })
@@ -934,107 +934,99 @@ MainTab:AddToggle({
             })
         end
 
-        -- ===== FUNÇÃO PARA MODIFICAR O TIRO (WALLBANG) =====
-        -- Hook no remote "Shoot" para modificar o alvo
-        if Value then
-            -- Desconecta o hook anterior se existir
-            if env.WallbangConnection then
-                env.WallbangConnection:Disconnect()
-                env.WallbangConnection = nil
+        -- Se desativar, restaura a função original
+        if not Value then
+            if env._originalWallbang then
+                env._originalWallbang = nil
             end
+            return
+        end
 
-            -- Cria um novo hook
-            local function wallbangHook(originCF, targetCF)
-                -- Obtém a posição do assassino (se existir)
-                local targetPos = nil
-                local roles = getRoles()
-                for plrName, role in pairs(roles) do
-                    if role == "Murderer" then
-                        local player = Players:FindFirstChild(plrName)
-                        if player and player ~= LocalPlayer and player.Character then
-                            local hrp = player.Character:FindFirstChild("HumanoidRootPart")
-                            if hrp then
-                                targetPos = hrp.Position
-                            else
-                                local torso = player.Character:FindFirstChild("Torso") or player.Character:FindFirstChild("UpperTorso")
-                                if torso then targetPos = torso.Position end
-                            end
-                            break
+        -- ===== FUNÇÃO QUE MODIFICA O TIRO PARA ATRAVESSAR PAREDES =====
+        local function wallbangShoot(originCF, targetPos)
+            if not Char then return end
+
+            -- Verifica se tem arma
+            local gun = Char:FindFirstChild("Gun")
+            if not gun then
+                gun = LocalPlayer:FindFirstChild("Backpack"):FindFirstChild("Gun")
+            end
+            if not gun then return end
+
+            local handle = gun:FindFirstChild("Handle")
+            if not handle then return end
+
+            local shootRemote = gun:FindFirstChild("Shoot")
+            if not shootRemote or not shootRemote:IsA("RemoteEvent") then return end
+
+            -- Obtém a posição atual do assassino (se disponível)
+            local roles = getRoles()
+            local murdererPos = nil
+            for plrName, role in pairs(roles) do
+                if role == "Murderer" then
+                    local player = Players:FindFirstChild(plrName)
+                    if player and player ~= LocalPlayer and player.Character then
+                        local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+                        if hrp then
+                            murdererPos = hrp.Position
                         end
+                        break
                     end
                 end
-
-                -- Se encontrou o assassino, modifica o alvo para um ponto atrás dele
-                if targetPos then
-                    -- Cria um CFrame apontando para o assassino, mas com o alvo estendido 50 studs para trás
-                    local direction = (targetPos - originCF.Position).Unit
-                    local newTargetPos = targetPos + direction * 50 -- estende o alvo para trás do assassino
-                    local newTargetCF = CFrame.new(newTargetPos)
-                    return originCF, newTargetCF
-                end
-
-                -- Se não encontrou o assassino, mantém o alvo original
-                return originCF, targetCF
             end
 
-            -- Hook no remote "Shoot" (substitui o FireServer)
-            local originalShoot = nil
-            local function hookShoot(remote, ...)
-                local args = {...}
-                if #args >= 2 then
-                    local originCF = args[1]
-                    local targetCF = args[2]
-                    -- Modifica o alvo
-                    local newOrigin, newTarget = wallbangHook(originCF, targetCF)
-                    -- Chama o FireServer com os novos parâmetros
-                    originalShoot(remote, newOrigin, newTarget)
-                else
-                    -- Se não tiver os parâmetros esperados, chama original
-                    originalShoot(remote, ...)
-                end
+            -- Se não encontrar o assassino, usa a posição original
+            local targetCF = CFrame.new(targetPos)
+
+            -- Se encontrou o assassino, modifica o alvo para um ponto 50 studs atrás dele (atravessa a parede)
+            if murdererPos then
+                local direction = (murdererPos - originCF.Position).Unit
+                local newTargetPos = murdererPos + direction * 50
+                targetCF = CFrame.new(newTargetPos)
             end
 
-            -- Substitui o FireServer do remote "Shoot" em todas as armas
-            env.WallbangConnection = game:GetService("RunService").Heartbeat:Connect(function()
-                local char = LocalPlayer.Character
-                if char then
-                    local gun = char:FindFirstChild("Gun")
-                    if gun then
-                        local shootRemote = gun:FindFirstChild("Shoot")
-                        if shootRemote and shootRemote:IsA("RemoteEvent") then
-                            -- Se ainda não foi hookado
-                            if not env._wallbangHooked then
-                                env._wallbangHooked = true
-                                originalShoot = shootRemote.FireServer
-                                shootRemote.FireServer = function(self, ...)
-                                    hookShoot(self, ...)
-                                end
-                            end
-                        end
-                    end
-                end
+            -- Dispara o tiro com o alvo modificado
+            pcall(function()
+                shootRemote:FireServer(originCF, targetCF)
             end)
-        else
-            -- Desativa o hook
-            if env.WallbangConnection then
-                env.WallbangConnection:Disconnect()
-                env.WallbangConnection = nil
+        end
+
+        -- ===== HOOK NO REMOTE "Shoot" =====
+        local function hookShootRemote()
+            local char = LocalPlayer.Character
+            if not char then return end
+
+            local gun = char:FindFirstChild("Gun")
+            if not gun then return end
+
+            local shootRemote = gun:FindFirstChild("Shoot")
+            if not shootRemote or not shootRemote:IsA("RemoteEvent") then return end
+
+            -- Salva o FireServer original se ainda não foi salvo
+            if not env._originalWallbang then
+                env._originalWallbang = shootRemote.FireServer
             end
-            -- Restaura o FireServer original
-            if env._wallbangHooked then
-                env._wallbangHooked = false
-                local char = LocalPlayer.Character
-                if char then
-                    local gun = char:FindFirstChild("Gun")
-                    if gun then
-                        local shootRemote = gun:FindFirstChild("Shoot")
-                        if shootRemote and shootRemote:IsA("RemoteEvent") and originalShoot then
-                            shootRemote.FireServer = originalShoot
-                        end
-                    end
-                end
+
+            -- Substitui o FireServer
+            shootRemote.FireServer = function(self, originCF, targetCF)
+                local targetPos = targetCF and targetCF.Position or Vector3.new(0,0,0)
+                wallbangShoot(originCF, targetPos)
             end
         end
+
+        -- ===== LOOP PARA MANTER O HOOK ATIVO =====
+        if env.WallbangLoop then
+            env.WallbangLoop = false
+            task.wait(0.1)
+        end
+
+        env.WallbangLoop = true
+        task.spawn(function()
+            while env.WallbangLoop and env.WallbangEnabled do
+                pcall(hookShootRemote)
+                task.wait(0.5)
+            end
+        end)
     end
 })
 
